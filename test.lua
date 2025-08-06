@@ -1,3 +1,4 @@
+print("123")
 local base64 = require('gamesense/base64')
 local ffi = require("ffi")
 local http = require("gamesense/http")
@@ -42,3 +43,4 @@ if check_loader_environment() and hwid_valid then
 else
     return
 end
+
