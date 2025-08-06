@@ -14,6 +14,7 @@ local pastebin_hwid_url = "https://pastebin.com/015e95ac"
 
 
 print("Loader HWID: " .. HWID)  -- 打印从加载器传递的 HWID
+local current_hwid = HWID
 local function get_hwids_from_pastebin()
     http.get(pastebin_hwid_url, function(success, response)
         if not success then
@@ -43,4 +44,3 @@ if check_loader_environment() and hwid_valid then
 else
     return
 end
-
