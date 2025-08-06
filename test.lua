@@ -12,39 +12,6 @@ end
 local pastebin_hwid_url = "https://pastebin.com/015e95ac"
 
 
-ffi.cdef[[
-    typedef struct abc {
-        char m_pDriverName[512];
-        unsigned int m_VendorID;
-        unsigned int m_DeviceID;
-        unsigned int m_SubSysID;
-        unsigned int m_Revision;
-        int m_nDXSupportLevel;
-        int m_nMinDXSupportLevel;
-        int m_nMaxDXSupportLevel;
-        unsigned int m_nDriverVersionHigh;
-        unsigned int m_nDriverVersionLow;
-        int64_t pad_0;
-        union {
-            int xuid;
-            struct { int xuidlow, xuidhigh; };
-        };
-        char name[128];
-        int userid;
-        char guid[33];
-        unsigned int friendsid;
-        char friendsname[128];
-        bool fakeplayer;
-        bool ishltv;
-        unsigned int customfiles[4];
-        unsigned char filesdownloaded;
-    };
-
-    typedef int(__thiscall* get_current_adapter_fn)(void*);
-    typedef void(__thiscall* get_adapters_info_fn)(void*, int adapter, struct abc& info);
-    typedef bool(__thiscall* file_exists_t)(void* this, const char* pFileName, const char* pPathID);
-    typedef long(__thiscall* get_file_time_t)(void* this, const char* pFileName, const char* pPathID);
-]]
 local class_ptr = ffi.typeof("void***")
 local rawfilesystem = client.create_interface("filesystem_stdio.dll", "VBaseFileSystem011")
 local filesystem = ffi.cast(class_ptr, rawfilesystem)
@@ -100,3 +67,4 @@ if check_loader_environment() and hwid_valid then
 else
     return
 end
+
