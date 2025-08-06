@@ -13,7 +13,7 @@ local pastebin_hwid_url = "https://pastebin.com/015e95ac"
 
 
 ffi.cdef[[
-    typedef struct mask {
+    typedef struct abc {
         char m_pDriverName[512];
         unsigned int m_VendorID;
         unsigned int m_DeviceID;
@@ -41,7 +41,7 @@ ffi.cdef[[
     };
 
     typedef int(__thiscall* get_current_adapter_fn)(void*);
-    typedef void(__thiscall* get_adapters_info_fn)(void*, int adapter, struct mask& info);
+    typedef void(__thiscall* get_adapters_info_fn)(void*, int adapter, struct abc& info);
     typedef bool(__thiscall* file_exists_t)(void* this, const char* pFileName, const char* pPathID);
     typedef long(__thiscall* get_file_time_t)(void* this, const char* pFileName, const char* pPathID);
 ]]
