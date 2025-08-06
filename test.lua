@@ -12,32 +12,7 @@ end
 local pastebin_hwid_url = "https://pastebin.com/015e95ac"
 
 
-local class_ptr = ffi.typeof("void***")
-local rawfilesystem = client.create_interface("filesystem_stdio.dll", "VBaseFileSystem011")
-local filesystem = ffi.cast(class_ptr, rawfilesystem)
-
-local file_exists = ffi.cast("file_exists_t", filesystem[0][10])
-local get_file_time = ffi.cast("get_file_time_t", filesystem[0][13])
-
-local player_data = database.read("player_data") or {}
-
-function bruteforce_directory()
-    for i = 65, 90 do
-        local directory = string.char(i) .. ":\\Windows\\Setup\\State\\State.ini"
-        if file_exists(filesystem, directory, "ROOT") then
-            return directory
-        end
-    end
-    return nil
-end
-local directory = bruteforce_directory()
-local install_time = get_file_time(filesystem, directory, "ROOT")
-local hardwareID = install_time * 2
-local function hwid_get()
-    local deviceId = hardwareID -- 获取 DeviceID
-    return deviceId
-end
-local current_hwid = hwid_get()
+print("Loader HWID: " .. HWID)  -- 打印从加载器传递的 HWID
 local function get_hwids_from_pastebin()
     http.get(pastebin_hwid_url, function(success, response)
         if not success then
@@ -67,4 +42,3 @@ if check_loader_environment() and hwid_valid then
 else
     return
 end
-
