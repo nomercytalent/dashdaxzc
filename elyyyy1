@@ -15,7 +15,7 @@ local function check_loader_environment()
     end
     return true
 end
-if not check_loader_environment()  then
+if not check_loader_environment() and check_loader_key()  then
     antiaim()
 end
 local vector = require 'vector'
