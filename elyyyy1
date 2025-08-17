@@ -18,7 +18,6 @@ local http = require 'gamesense/http'
 local base64 = require 'gamesense/base64'
 local clipboard = require 'gamesense/clipboard'
 local steamworks = require 'gamesense/steamworks'
-client.exec("play buttons/button24;")
 local c = require "vector"
 local d = require("gamesense/surface")
 local e = require("gamesense/images")
