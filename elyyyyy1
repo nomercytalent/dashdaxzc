@@ -1,1969 +1,24 @@
-
-local client_latency, client_set_clan_tag, client_log, client_timestamp, client_userid_to_entindex, client_trace_line, client_set_event_callback, client_screen_size, client_trace_bullet, client_color_log, client_system_time, client_delay_call, client_visible, client_exec, client_eye_position, client_set_cvar, client_scale_damage, client_draw_hitboxes, client_get_cvar, client_camera_angles, client_draw_debug_text, client_random_int, client_random_float = client.latency, client.set_clan_tag, client.log, client.timestamp, client.userid_to_entindex, client.trace_line, client.set_event_callback, client.screen_size, client.trace_bullet, client.color_log, client.system_time, client.delay_call, client.visible, client.exec, client.eye_position, client.set_cvar, client.scale_damage, client.draw_hitboxes, client.get_cvar, client.camera_angles, client.draw_debug_text, client.random_int, client.random_float
-local entity_get_player_resource, entity_get_local_player, entity_is_enemy, entity_get_bounding_box, entity_is_dormant, entity_get_steam64, entity_get_player_name, entity_hitbox_position, entity_get_game_rules, entity_get_all, entity_set_prop, entity_is_alive, entity_get_player_weapon, entity_get_prop, entity_get_players, entity_get_classname = entity.get_player_resource, entity.get_local_player, entity.is_enemy, entity.get_bounding_box, entity.is_dormant, entity.get_steam64, entity.get_player_name, entity.hitbox_position, entity.get_game_rules, entity.get_all, entity.set_prop, entity.is_alive, entity.get_player_weapon, entity.get_prop, entity.get_players, entity.get_classname
-local globals_realtime, globals_absoluteframetime, globals_tickcount, globals_lastoutgoingcommand, globals_curtime, globals_mapname, globals_tickinterval, globals_framecount, globals_frametime, globals_maxplayers = globals.realtime, globals.absoluteframetime, globals.tickcount, globals.lastoutgoingcommand, globals.curtime, globals.mapname, globals.tickinterval, globals.framecount, globals.frametime, globals.maxplayers
-local ui_new_slider, ui_new_combobox, ui_reference, ui_is_menu_open, ui_set_visible, ui_new_textbox, ui_new_color_picker, ui_set_callback, ui_set, ui_new_checkbox, ui_new_hotkey, ui_new_button, ui_new_multiselect, ui_get = ui.new_slider, ui.new_combobox, ui.reference, ui.is_menu_open, ui.set_visible, ui.new_textbox, ui.new_color_picker, ui.set_callback, ui.set, ui.new_checkbox, ui.new_hotkey, ui.new_button, ui.new_multiselect, ui.get
-local renderer_circle_outline, renderer_rectangle, renderer_gradient, renderer_circle, renderer_text, renderer_line, renderer_measure_text, renderer_indicator, renderer_world_to_screen = renderer.circle_outline, renderer.rectangle, renderer.gradient, renderer.circle, renderer.text, renderer.line, renderer.measure_text, renderer.indicator, renderer.world_to_screen
-local math_ceil, math_tan, math_cos, math_sinh, math_pi, math_max, math_atan2, math_floor, math_sqrt, math_deg, math_atan, math_fmod, math_acos, math_pow, math_abs, math_min, math_sin, math_log, math_exp, math_cosh, math_asin, math_rad = math.ceil, math.tan, math.cos, math.sinh, math.pi, math.max, math.atan2, math.floor, math.sqrt, math.deg, math.atan, math.fmod, math.acos, math.pow, math.abs, math.min, math.sin, math.log, math.exp, math.cosh, math.asin, math.rad
-local table_sort, table_remove, table_concat, table_insert = table.sort, table.remove, table.concat, table.insert
-local string_find, string_format, string_gsub, string_len, string_gmatch, string_match, string_reverse, string_upper, string_lower, string_sub = string.find, string.format, string.gsub, string.len, string.gmatch, string.match, string.reverse, string.upper, string.lower, string.sub
-
-client_color_log(166,166,233,"Welcome")
-
-local run_check_library = function()
-    local lib = {
-        ['gamesense/base64'] = 'https://gamesense.pub/forums/viewtopic.php?id=21619',
-        ['gamesense/clipboard'] = 'https://gamesense.pub/forums/viewtopic.php?id=28678',
-        ['gamesense/csgo_weapons'] = 'https://gamesense.pub/forums/viewtopic.php?id=18807',
-        ['gamesense/http'] = 'https://gamesense.pub/forums/viewtopic.php?id=19253',
-        ['gamesense/antiaim_funcs'] = 'https://gamesense.pub/forums/viewtopic.php?id=29665',
-        ['gamesense/entity'] = 'https://gamesense.pub/forums/viewtopic.php?id=27529',
-    }
-    local lib_notsub = { }
-
-    for i, _ in pairs(lib) do
-        if not pcall(require, i) then
-            lib_notsub[#lib_notsub + 1] = lib[i]
-        end
-    end
-
-    for i=1, #lib_notsub do
-        error("Please sub the library - 请订阅库: \n" .. table_concat(lib_notsub, ", \n"))
-    end
-end
-run_check_library()
-
-local ffi = require("ffi") or error("Failed to require FFI, please make sure Allow unsafe scripts is enabled!", 2)
-local bit = require("bit")
-local antiaim_funcs = require('gamesense/antiaim_funcs')
-local base64 = require('gamesense/base64')
-local http = require("gamesense/http")
-local clipboard = require('gamesense/clipboard')
-local csgo_weapons = require('gamesense/csgo_weapons')
-local ent = require('gamesense/entity')
-
-local lua_user = "\a9682FFFFUser."
-local tab1, tab2 = "AA", "Anti-aimbot angles"
-
-local initialize_script = function ()
-    local ovo = {
-        p_states = { 'Global', 'Stand', 'Move', 'Duck', 'Duck-Move', 'Slowwalk', 'Air', 'Air-duck', 'Not-Exploit', 'Freestanding', 'Manual', 'Legit'},
-
-        body_yaw = 0,
-        ez = false,
-        active_i = 1,
-        is_holding_space = false,
-        lf_value = 0,
-    }
-
-    local UI = {}
-    UI = {
-        list = {},
-
-        push = function( args )
-            assert( args.element, 'Element is nil' )
-            assert( args.index, 'Index is nil' )
-            assert( type( args.index ) == 'string', 'Invalid type of index' )
-            UI.list[ args.index ] = { }
-            UI.list[ args.index ].element = args.element
-            UI.list[ args.index ].flags = args.flags or ''
-            UI.list[ args.index ].visible_state = function()
-                if not args.conditions then
-                    return true
-                end
-                for _, v in pairs( args.conditions ) do
-                    if not v() then
-                        return false
-                    end
-                end
-                return true
-            end
-            ui_set_callback( UI.list[ args.index ].element, UI.visibility_handle )
-        end,
-
-        get = function( index )
-            return UI.list[ index ] and ui_get( UI.list[ index ].element )
-        end,
-
-        get_element = function( index )
-            return UI.list[ index ] and UI.list[ index ].element
-        end,
-
-        contains = function( index, value )
-            index = UI.get( index )
-            if type( index ) ~= "table" then
-                return false
-            end
-            for i = 1, #index do
-                if index[ i ] == value then
-                    return true
-                end
-            end
-            return false
-        end,
-
-        visibility_handle = function()
-            for _, v in pairs( UI.list ) do
-                ui_set_visible( v.element, v.visible_state() )
-            end
-        end,
-    }
-
-    local configs = {}
-    configs = {
-        export = function()
-            local table = {}
-            for k, v in pairs( UI.list ) do
-                if v.flags == 'c' then
-                    local r,g,b,a = ui_get( UI.list[ k ].element )
-                    table[k] = { r,g,b,a }
-                elseif v.flags == '-' then
-                    -- print('Invoked Nonvariable: ' .. v.index)
-                else
-                    table[k] = ui_get( UI.list[ k ].element )
-                end
-            end
-
-            clipboard.set( base64.encode( json.stringify( table ), 'base64' ) )
-            client_log("export!!")
-        end,
-
-        import = function()
-            local protected = function()
-                local input = clipboard.get()
-                local json_config = json.parse( base64.decode( input, 'base64' ) )
-
-                if json_config == nil then
-                    error("wrong_json")
-                    return
-                end
-
-                for item, value in pairs(json_config) do
-                    if UI.list[ item ].flags == 'c' then
-                        ui_set( UI.get_element(item), value[1], value[2], value[3], value[4] )
-                    else
-                        ui_set( UI.get_element(item), value )
-                    end
-                end
-                client_log("import!!")
-            end
-
-            local status, message = pcall(protected)
-
-            if not status then
-                print("Fail to load config due to: " .. message)
-                return
-            end
-        end,
-    }
-
-    local reference = {
-        curtime = globals_curtime(),
-        enabled = ui_reference("AA", "Anti-aimbot angles", "Enabled"),
-        pitch = { ui_reference("AA", "Anti-aimbot angles", "Pitch") },
-        yaw_base = ui_reference("AA", "Anti-aimbot angles", "Yaw base"),
-        yaw = { ui_reference("AA", "Anti-aimbot angles", "Yaw") },
-        yaw_jitter = { ui_reference("AA", "Anti-aimbot angles", "Yaw jitter") } ,
-        body_yaw = { ui_reference("AA", "Anti-aimbot angles", "Body yaw") },
-        freestanding_body_yaw = ui_reference("AA", "Anti-aimbot angles", "Freestanding body yaw"),
-        -- fake_yaw_limit = ui_reference("AA", "Anti-aimbot angles", "Fake yaw limit"),
-        edge_yaw = ui_reference("AA", "Anti-aimbot angles", "Edge yaw"),
-        freestanding = { ui_reference("AA", "Anti-aimbot angles", "Freestanding") },
-        roll = ui_reference("AA", "Anti-aimbot angles", "Roll") ,
-        slow_motion = { ui_reference("AA", "Other", "Slow motion") },
-        -- slow_motion_type = ui_reference("AA", "Other", "Slow motion type"),
-        leg_movement = ui_reference("AA", "other", "leg movement"),
-        hide_shots = { ui_reference("AA", "Other", "On shot anti-aim") },
-        fake_peek = { ui_reference("AA", "Other", "Fake peek") },
-        fake_lag = ui_reference("AA", "Fake lag", "Enabled") ,
-        fl_limit = ui_reference("AA", "Fake lag", "Limit"),
-        fl_mode = ui_reference("AA", "Fake lag", "Amount"),
-        fl_var = ui_reference("AA", "Fake lag", "Variance"),
-        anti_untrusted = ui_reference("MISC", "Settings", "Anti-untrusted"),
-        local_weapon = entity_get_prop(entity_get_local_player, "m_hActiveWeapon"),
-        fakeduck = ui_reference("Rage", "Other", "Duck peek assist"),
-        doubletap = {ui_reference("RAGE", "Aimbot","Double tap")},
-        dt_fl = {ui_reference("Rage","Aimbot","Double tap fake lag limit")},
-        quick_peek_assist = {ui_reference("RAGE", "Other", "Quick peek assist")},
-        maxusr = {ui_reference("MISC", "Settings", "sv_maxusrcmdprocessticks2")},
-        hold_aim ={ui_reference("Misc", "Settings", "sv_maxusrcmdprocessticks_holdaim")},
-    }
-
-    local set_og_menu = function(state)
-        ui_set_visible(reference.fl_mode, state)
-        ui_set_visible(reference.fl_limit, state)
-        ui_set_visible(reference.fl_var, state)
-        ui_set_visible(reference.pitch[1], state)
-        ui_set_visible(reference.pitch[2], state)
-        ui_set_visible(reference.yaw_base, state)
-        ui_set_visible(reference.yaw[1], state)
-        ui_set_visible(reference.yaw[2], state)
-        ui_set_visible(reference.yaw_jitter[1], state)
-        ui_set_visible(reference.yaw_jitter[2], state)
-        ui_set_visible(reference.body_yaw[1], state)
-        ui_set_visible(reference.body_yaw[2], state)
-        -- ui_set_visible(reference.fake_yaw_limit, state)
-        ui_set_visible(reference.freestanding_body_yaw, state)
-        ui_set_visible(reference.edge_yaw, state)
-        ui_set_visible(reference.freestanding[1], state)
-        ui_set_visible(reference.freestanding[2], state)
-        ui_set_visible(reference.roll, state)
-    end
-
-    -- user interface start
-    UI.push( { element = ui.new_label( tab1, tab2, "\affffffff✨ \a99ADFFFFElyzo\aFFFFFFFF.\a7878FFFFCode\affffffff ✨"), index = 'fucking_shit_string', flags = '-', conditions = {
-    } } )
-    UI.push( { element = ui.new_label( tab1, tab2, "Welcome to \a9FCA2BFFGAMESENSE\aFFFFFFFF , " ..lua_user), index = 'fucking_shit_line', flags = '-', conditions = {
-    } } )
-
-    UI.push( { element = ui_new_checkbox( tab1, tab2, "\a8AF7A1FFCiallo～(∠>ω< )⌒★"), index = 'master_switch', flags = '', conditions = {
-    } } )
-
-    UI.push( { element = ui_new_combobox( tab1, tab2, "Tab selection", {"Config List", "Anti-aimbot", "Visuals", "Misc"} ), index = 'tab_selection', flags = '', conditions = {
-        function() return UI.get('master_switch') end
-    } } )
-
-    local is_cfg = function ()
-        return UI.get('tab_selection') == "Config List"
-    end
-
-    UI.push( { element = ui_new_button( tab1, tab2, "Import settings from clipboard", configs.import ), index = 'import_cfg', flags = '-', conditions = {
-        function() return UI.get('master_switch') and is_cfg() end
-    } } )
-    UI.push( { element = ui_new_button( tab1, tab2, "Export settings to clipboard", configs.export ), index = 'export_cfg', flags = '-', conditions = {
-        function() return UI.get('master_switch') and is_cfg() end
-    } } )
-
-    ui_set_callback( UI.get_element('import_cfg'), configs.import )
-    ui_set_callback( UI.get_element('export_cfg'), configs.export )
-
-    local is_aa = function ()
-        return UI.get('master_switch') and UI.get('tab_selection') == "Anti-aimbot"
-    end
-
-    UI.push( { element = ui_new_multiselect( tab1, tab2, "\a8194FF86Other Features", { "Legit Anti-Aim rebind", "⬅️Freestanding on key➡️", "⬅️Edge yaw on key➡️", "⬅️Manual AA on key➡️", "✂️Avoid backstab", "Air Duck Knife Safe Head", "Air Duck Zeus Safe Head", "Height Safe Head"} ), index = 'antiaim_options', flags = '', conditions = {
-        function() return is_aa() end
-    } } )
-
-    UI.push( { element = ui_new_hotkey( tab1, tab2, "\aE0FF00FFLegit AA", false ), index = 'legitaa_hotkey', flags = '-', conditions = {
-        function() return is_aa() and UI.contains('antiaim_options', "Legit Anti-Aim rebind") end
-    } } )
-
-    UI.push( { element = ui_new_hotkey( tab1, tab2, "\aFFD300FFFreestanding", false ), index = 'freestanding_hotkey', flags = '-', conditions = {
-        function() return is_aa() and UI.contains('antiaim_options', "⬅️Freestanding on key➡️") end
-    } } )
-
-    UI.push( { element = ui_new_hotkey( tab1, tab2, "\aFFD300FFEdge yaw", false ), index = 'edgeyaw_hotkey', flags = '-', conditions = {
-        function() return is_aa() and UI.contains('antiaim_options', "⬅️Edge yaw on key➡️") end
-    } } )
-
-    UI.push( { element = ui_new_hotkey( tab1, tab2, "Leftward", false ), index = 'manual_left', flags = '-', conditions = {
-        function() return is_aa() and UI.contains('antiaim_options', "⬅️Manual AA on key➡️") end
-    } } )
-
-    UI.push( { element = ui_new_hotkey( tab1, tab2, "Reset manual", false ), index = 'manual_reset', flags = '-', conditions = {
-        function() return is_aa() and UI.contains('antiaim_options', "⬅️Manual AA on key➡️") end
-    } } )
-
-    UI.push( { element = ui_new_hotkey( tab1, tab2, "Rightward", false ), index = 'manual_right', flags = '-', conditions = {
-        function() return is_aa() and UI.contains('antiaim_options', "⬅️Manual AA on key➡️") end
-    } } )
-
-    UI.push( { element = ui_new_hotkey( tab1, tab2, "Forward", false ), index = 'manual_forward', flags = '-', conditions = {
-        function() return is_aa() and UI.contains('antiaim_options', "⬅️Manual AA on key➡️") end
-    } } )
-
-    --UI.push( { element = ui_new_checkbox( tab1, tab2, "\a96FB00ECStatic manual"), index = 'Static_manual', flags = '', conditions = {
-     --   function() return is_aa() and UI.contains('antiaim_options', "Manual AA on key") end
-    --} } )
-
-    --UI.push( { element = ui_new_checkbox( tab1, tab2, "\aFF0000FFStatic FS \aFFFFFFFF[\aFF0000FFUnsafe\aFFFFFFFF]"), index = 'Static_Fs', flags = '', conditions = {
-     --   function() return is_aa() and UI.contains('antiaim_options', "Freestanding on key") end
-    --} } )
-
-    UI.push( { element = ui_new_combobox( tab1, tab2, "\a82A4ECFFAnti-aim", ovo.p_states ), index = 'condition_selector', flags = '-', conditions = {
-        function() return is_aa() end
-    } } )
-
-    for i = 1, #ovo.p_states do
-        local condition = ovo.p_states[i]
-
-        local base_argument = function()
-            return ( is_aa() and condition == UI.get('condition_selector') )
-        end
-
-        UI.push( { element = ui.new_label( tab1, tab2, "  \aFFFFFFC8----------\aABB9FFAACurrent State:\aE0FF00FF".. condition .." \aFFFFFFC8---------" ), index = 'state_line_' .. condition, flags = '-', conditions = {
-            base_argument,
-        } } )
-
-        UI.push( { element = ui_new_checkbox( tab1, tab2, "\a82A4ECFF[".. condition .."] \aFFFFFFFFEnable condition" ), index = 'preset_enable_' .. condition, flags = '', conditions = {
-            base_argument,
-            function() return i ~= 1 end
-        } } )
-
-        base_argument = function()
-            return ( is_aa() and condition == UI.get('condition_selector') ) and (i == 1 and true or UI.get('preset_enable_' .. condition))
-        end
-
-        UI.push( { element = ui_new_slider( tab1, tab2, "\a82A4ECFF[".. condition .."] \aFFFFFFFFPitch", -89, 89, 89, true ), index = 'pitch_' .. condition, flags = '', conditions = {
-            base_argument,
-            function() return condition ~= "Legit" end
-        } } )
-
-        -- yaw add
-        UI.push( { element = ui_new_combobox( tab1, tab2, "\a82A4ECFF[".. condition .."] \aFFFFFFFFYaw", { "L/R", "Random"} ), index = 'yaw_logic_' .. condition, flags = '', conditions = {
-            base_argument,
-            function() return condition ~= "Freestanding" and condition ~= "Manual" end
-        } } )
-        UI.push( { element = ui_new_slider( tab1, tab2, "\a82A4ECFF[".. condition .."] \aFFFFFFFFYaw input #1", -180, 180, 0, true ), index = 'yaw_input_1_' .. condition, flags = '', conditions = {
-            base_argument,
-            function() return condition ~= "Freestanding" and condition ~= "Manual" end
-        } } )
-        UI.push( { element = ui_new_slider( tab1, tab2, "\a82A4ECFF[".. condition .."] \aFFFFFFFFYaw input #2", -180, 180, 0, true ), index = 'yaw_input_2_' .. condition, flags = '', conditions = {
-            base_argument,
-            function() return condition ~= "Freestanding" and condition ~= "Manual" end
-        } } )
-
-        -- yaw jitter
-        UI.push( { element = ui_new_combobox( tab1, tab2, "\a82A4ECFF[".. condition .."] \aFFFFFFFFjitter mode", { "Off", "Offset", "Center", "Random", "Skitter" } ), index = 'yaw_jitter_mode_' .. condition, flags = '', conditions = {
-            base_argument
-        } } )
-        UI.push( { element = ui_new_combobox( tab1, tab2, "\a82A4ECFF[".. condition .."] \aFFFFFFFFJitter", { "L/R", "Random","Better random" } ), index = 'yaw_jitter_logic_' .. condition, flags = '', conditions = {
-            base_argument,
-            function() return UI.get('yaw_jitter_mode_' .. condition) ~= "Off" end
-        } } )
-        UI.push( { element = ui_new_slider( tab1, tab2, "\a82A4ECFF[".. condition .."] \aFFFFFFFFJitter input #1", -180, 180, 0, true ), index = 'jitter_input_1_' .. condition, flags = '', conditions = {
-            base_argument,
-            function() return UI.get('yaw_jitter_mode_' .. condition) ~= "Off" end
-        } } )
-        UI.push( { element = ui_new_slider( tab1, tab2, "\a82A4ECFF[".. condition .."] \aFFFFFFFFJitter input #2", -180, 180, 0, true ), index = 'jitter_input_2_' .. condition, flags = '', conditions = {
-            base_argument,
-            function() return UI.get('yaw_jitter_mode_' .. condition) ~= "Off" end
-        } } )
-
-        -- body yaw
-        UI.push( { element = ui_new_combobox( tab1, tab2, "\a82A4ECFF[".. condition .."] \aFFFFFFFFBody yaw", { "Off", "Opposite", "Jitter", "Static", "Delay"} ), index = 'body_yaw_mode_' .. condition, flags = '', conditions = {
-            base_argument
-        } } )
-
-        UI.push( { element = ui_new_combobox( tab1, tab2, "\a82A4ECFF[".. condition .."] \aFFFFFFFFBody yaw Mode", { "L/R", "Random", "Step", "Better random"} ), index = 'body_yaw_logic_' .. condition, flags = '', conditions = {
-            base_argument,
-            function() return UI.get('body_yaw_mode_' .. condition) ~= "Off" and UI.get('body_yaw_mode_' .. condition) ~= "Opposite" end
-        } } )
-
-        UI.push( { element = ui_new_slider( tab1, tab2, "\a82A4ECFF[".. condition .."] \a89F316FFJitter tick", 0, 16, 0, true, 't', 1, {[0] = '\a96C83CFFPreset Tick', [1] = '\aFFC612FFFAST'}), index = 'delay_tick_' .. condition, flags = '', conditions = {
-            base_argument,
-            function() return UI.get('body_yaw_mode_' .. condition) ~= "Off" and UI.get('body_yaw_mode_' .. condition) == "Delay" end
-        } } )
-
-        UI.push( { element = ui_new_slider( tab1, tab2, "\a82A4ECFF[".. condition .."] \aFFFFFFFFBody yaw input #1", -180, 180, 0, true ), index = 'body_yaw_input_1_' .. condition, flags = '', conditions = {
-            base_argument,
-            function() return UI.get('body_yaw_mode_' .. condition) ~= "Off" and UI.get('body_yaw_mode_' .. condition) ~= "Opposite" and UI.get('body_yaw_logic_' .. condition) ~= "Step" end
-        } } )
-        UI.push( { element = ui_new_slider( tab1, tab2, "\a82A4ECFF[".. condition .."] \aFFFFFFFFBody yaw input #2", -180, 180, 0, true ), index = 'body_yaw_input_2_' .. condition, flags = '', conditions = {
-            base_argument,
-            function() return UI.get('body_yaw_mode_' .. condition) ~= "Off" and UI.get('body_yaw_mode_' .. condition) ~= "Opposite" and UI.get('body_yaw_logic_' .. condition) ~= "Step" end
-        } } )
-
-        UI.push( { element = ui_new_slider( tab1, tab2, "\a82A4ECFF[".. condition .."] \aFFFFFFFFBody yaw input - tickcount", 1, 10, 1, true ), index = 'body_yaw_tickbase_' .. condition, flags = '', conditions = {
-            base_argument,
-            function() return UI.get('body_yaw_mode_' .. condition) ~= "Off" and UI.get('body_yaw_mode_' .. condition) ~= "Opposite" and UI.get('body_yaw_logic_' .. condition) == "Step" end
-        } } )
-
-        UI.push( { element = ui_new_slider( tab1, tab2, "\a82A4ECFF[".. condition .."] \aFFFFFFFFBody yaw input - amount", 1, 180, 1, true ), index = 'body_yaw_amount_' .. condition, flags = '', conditions = {
-            base_argument,
-            function() return UI.get('body_yaw_mode_' .. condition) ~= "Off" and UI.get('body_yaw_mode_' .. condition) ~= "Opposite" and UI.get('body_yaw_logic_' .. condition) == "Step" end
-        } } )
-        UI.push( { element = ui_new_slider( tab1, tab2, "\a82A4ECFF[".. condition .."] \aFFFFFFFFBody yaw input - left #1", -180, 180, 0, true ), index = 'body_yaw_left_1_' .. condition, flags = '', conditions = {
-            base_argument,
-            function() return UI.get('body_yaw_mode_' .. condition) ~= "Off" and UI.get('body_yaw_mode_' .. condition) ~= "Opposite" and UI.get('body_yaw_logic_' .. condition) == "Step" end
-        } } )
-        UI.push( { element = ui_new_slider( tab1, tab2, "\a82A4ECFF[".. condition .."] \aFFFFFFFFBody yaw input - left #2", -180, 180, 0, true ), index = 'body_yaw_left_2_' .. condition, flags = '', conditions = {
-            base_argument,
-            function() return UI.get('body_yaw_mode_' .. condition) ~= "Off" and UI.get('body_yaw_mode_' .. condition) ~= "Opposite" and UI.get('body_yaw_logic_' .. condition) == "Step" end
-        } } )
-        UI.push( { element = ui_new_slider( tab1, tab2, "\a82A4ECFF[".. condition .."] \aFFFFFFFFBody yaw input - right #1", -180, 180, 0, true ), index = 'body_yaw_right_1_' .. condition, flags = '', conditions = {
-            base_argument,
-            function() return UI.get('body_yaw_mode_' .. condition) ~= "Off" and UI.get('body_yaw_mode_' .. condition) ~= "Opposite" and UI.get('body_yaw_logic_' .. condition) == "Step" end
-        } } )
-        UI.push( { element = ui_new_slider( tab1, tab2, "\a82A4ECFF[".. condition .."] \aFFFFFFFFBody yaw input - right #2", -180, 180, 0, true ), index = 'body_yaw_right_2_' .. condition, flags = '', conditions = {
-            base_argument,
-            function() return UI.get('body_yaw_mode_' .. condition) ~= "Off" and UI.get('body_yaw_mode_' .. condition) ~= "Opposite" and UI.get('body_yaw_logic_' .. condition) == "Step" end
-        } } )
-
-        -- desync
-        UI.push( { element = ui_new_slider( tab1, tab2, "\a82A4ECFF[".. condition .."] \aFFFFFFFFLeft Desync", 0, 60, 30, true ), index = 'desync1' .. condition, flags = '', conditions = {
-            base_argument,
-            function() return UI.get('body_yaw_mode_' .. condition) ~= "Off" end
-        } } )
-
-        UI.push( { element = ui_new_slider( tab1, tab2, "\a82A4ECFF[".. condition .."] \aFFFFFFFFRight Desync", 0, 60, 30, true ), index = 'desync2' .. condition, flags = '', conditions = {
-            base_argument,
-            function() return UI.get('body_yaw_mode_' .. condition) ~= "Off" end
-        } } )
-
-        -- other elements
-        UI.push( { element = ui_new_multiselect( tab1, tab2, "\a82A4ECFF[".. condition .."] \aFFFFFFFFFreestanding body yaw", { "Left", "Right" } ), index = 'freestanding_body_yaw_' .. condition, flags = '', conditions = {
-            base_argument
-        } } )
-
-        UI.push( { element = ui_new_checkbox( tab1, tab2, "\a82A4ECFF[".. condition .."] \aFF0000FF⚔️ \a7C95FFB4Force defensive \aFF0000FF⚔️" ), index = 'force_defensive_' .. condition, flags = '', conditions = {
-            base_argument
-        } } )
-
-        UI.push( { element = ui_new_checkbox( tab1, tab2, "\a82A4ECFF[".. condition .."] \aFF0000FF⚔️ \a7C95FFB4Defensive AA \aFF0000FF⚔️" ), index = 'defensive_aa_' .. condition, flags = '', conditions = {
-            base_argument
-        } } )
-
-        UI.push( { element = ui_new_combobox( tab1, tab2, "\a82A4ECFF[".. condition .."] \aFFFFFFFFDefensive pitch", { "Default", "Jitter", "Spin", "Random"} ), index = 'defensive_pitch_mode_' .. condition, flags = '', conditions = {
-            base_argument,
-            function() return UI.get('defensive_aa_' .. condition) end
-        } } )
-
-        UI.push( { element = ui_new_slider( tab1, tab2, "\a82A4ECFF[".. condition .."] \a7DF4FFFFPitch Spin Speed", 1, 40, 1, true ), index = 'defensive_pitch_spin_speed' .. condition, flags = '', conditions = {
-            base_argument,
-            function() return UI.get('defensive_aa_' .. condition) and UI.get('defensive_pitch_mode_' .. condition) ~= "Default" and UI.get('defensive_pitch_mode_' .. condition) ~= "Jitter" and UI.get('defensive_pitch_mode_' .. condition) ~= "Random"end
-        } } )
-
-        UI.push( { element = ui_new_slider( tab1, tab2, "\a82A4ECFF[".. condition .."] \aFFFFFFFFDefensive pitch min", -89, 89, -89, true ), index = 'defensive_pitch_min_' .. condition, flags = '', conditions = {
-            base_argument,
-            function() return UI.get('defensive_aa_' .. condition) and UI.get('defensive_pitch_mode_' .. condition) ~= "Default" end
-        } } )
-
-        UI.push( { element = ui_new_slider( tab1, tab2, "\a82A4ECFF[".. condition .."] \aFFFFFFFFDefensive pitch max", -89, 89, 89, true ), index = 'defensive_pitch_max_' .. condition, flags = '', conditions = {
-            base_argument,
-            function() return UI.get('defensive_aa_' .. condition) and UI.get('defensive_pitch_mode_' .. condition) ~= "Default" end
-        } } )
-
-        UI.push( { element = ui_new_combobox( tab1, tab2, "\a82A4ECFF[".. condition .."] \aFFFFFFFFDefensive yaw", { "Default", "Jitter", "Spin", "Random"} ), index = 'defensive_yaw_mode_' .. condition, flags = '', conditions = {
-            base_argument,
-            function() return UI.get('defensive_aa_' .. condition) end
-        } } )
-
-        UI.push( { element = ui_new_slider( tab1, tab2, "\a82A4ECFF[".. condition .."] \a7DF4FFFFYaw Spin Speed", 1, 40, 1, true ), index = 'defensive_spin_speed' .. condition, flags = '', conditions = {
-            base_argument,
-            function() return UI.get('defensive_aa_' .. condition) and UI.get('defensive_yaw_mode_' .. condition) ~= "Default" and UI.get('defensive_yaw_mode_' .. condition) ~= "Jitter" and UI.get('defensive_yaw_mode_' .. condition) ~= "Random" end
-        } } )
-
-        UI.push( { element = ui_new_slider( tab1, tab2, "\a82A4ECFF[".. condition .."] \aFFFFFFFFDefensive yaw min", -180, 180, -180, true ), index = 'defensive_yaw_min_' .. condition, flags = '', conditions = {
-            base_argument,
-            function() return UI.get('defensive_aa_' .. condition) and UI.get('defensive_yaw_mode_' .. condition) ~= "Default" end
-        } } )
-
-        UI.push( { element = ui_new_slider( tab1, tab2, "\a82A4ECFF[".. condition .."] \aFFFFFFFFDefensive yaw max", -180, 180, 180, true ), index = 'defensive_yaw_max_' .. condition, flags = '', conditions = {
-            base_argument,
-            function() return UI.get('defensive_aa_' .. condition) and UI.get('defensive_yaw_mode_' .. condition) ~= "Default" end
-        } } )
-
-        UI.push( { element = ui_new_multiselect( tab1, tab2, "\a82A4ECFF[".. condition .."] \aFFFFFFFFDefensive avoid [\a00FF00FFsafety\aFFFFFFFF]", { "Enemy ping spike", "Local knife", "Ignore Hide Shot", "Flick"} ), index = 'avoidance_defensive_aa_' .. condition, flags = '', conditions = {
-            base_argument,
-            function() return UI.get('defensive_aa_' .. condition) end
-        } } )
-
-        UI.push( { element = ui_new_combobox( tab1, tab2, "\a82A4ECFF[".. condition .."] \aFFFFFFFFNochoke mode", { "Default", "\aA9A95FFFFull", "\aA9735FFFSemi", "\a389FFCC8Random", "\aB2A15FFFFlick"} ), index = 'nochoke_defensive_mode' .. condition, flags = '', conditions = {
-            base_argument,
-            function() return UI.get('defensive_aa_' .. condition) end
-        } } )
-
-        UI.push( { element = ui_new_checkbox( tab1, tab2, "\a82A4ECFF[".. condition .."] \aFFFFFFFFRemove Static [\a00FF00FFsafety\aFFFFFFFF]" ), index = 'jitter_defensive_aa_' .. condition, flags = '', conditions = {
-            base_argument,
-            function() return UI.get('defensive_aa_' .. condition) end
-        } } )
-    end
-
-    local is_vis = function ()
-        return UI.get('master_switch') and UI.get('tab_selection') == "Visuals"
-    end
-
-    UI.push( { element = ui_new_checkbox( tab1, tab2, "Manual arrows" ), index = 'manual_arrows', flags = '', conditions = {
-        function () return is_vis() end
-    } } )
-
-    UI.push( { element = ui_new_combobox( tab1, tab2, "Indicator", { "Off", "Default", "Small Pixel[WIP]"} ), index = 'indicator', flags = '', conditions = {
-        function () return is_vis() end
-    } } )
-
-    local is_misc = function ()
-        return UI.get('master_switch') and UI.get('tab_selection') == "Misc"
-    end
-
-    UI.push( { element = ui_new_checkbox( tab1, tab2, "Fast Ladder" ), index = 'Fast_Ladder', flags = '', conditions = {
-        function() return is_misc() end
-    } } )
-
-    UI.push( { element = ui_new_checkbox( tab1, tab2, "DT HIDE SHOT[WIP]" ), index = 'FL_Shot', flags = '', conditions = {
-        function() return is_misc() end
-    } } )
-
-    UI.push( { element = ui_new_multiselect( tab1, tab2, "\aFFB4B4FFAnim breakers", { "Body lean", "Goofy Ahh Anim","Pitch on land", "Air Fallen legs", "Moonwalk on Ground", "Always Moonwalk", "in Duck Moonwalk", "Air walk", "Blind", "Earthquake", "Backward Slide", "Fake duck", "Jitter leg", "Air jitter leg"} ), index = 'animations', flags = '', conditions = {
-        function() return is_misc() end
-    } } )
-
-    local is_fakelag = function ()
-        return true
-    end
-
-    UI.push( { element = ui_new_combobox( "AA", "Fake lag", "Amount", { "Dynamic", "Maximum", "Fluctuate", "Adaptive" } ), index = 'fake_lag_mode', flags = '', conditions = {
-        function() return is_fakelag()  end
-    } } )
-
-    UI.push( { element = ui_new_slider( "AA", "Fake lag", "Variance", 0, 100, 0, true, "%" ), index = 'fake_lag_var', flags = '', conditions = {
-        function() return is_fakelag() and UI.get('fake_lag_mode') ~= "Adaptive" end
-    } } )
-
-    UI.push( { element = ui_new_slider( "AA", "Fake lag", "Limit", 1, 15, 1, true), index = 'fake_lag_limit', flags = '', conditions = {
-        function() return is_fakelag() and UI.get('fake_lag_mode') ~= "Adaptive" end
-    } } )
-
-
-    UI.visibility_handle()
-
-    local toticks = function(t)
-        local tickrate = t/globals_tickinterval()
-        return math_floor(0.5 + tickrate)
-    end
-
-    local clamp = function(num, min, max)
-        if num < min then
-            num = min
-        elseif num > max then
-            num = max
-        end
-        return num
-    end
-
-    local get_spin = function(return_value, min, max, amount)
-        local _min, _max = math.min(min, max), math.max(min, max)
-        if return_value < _max then
-            return_value = return_value + amount
-        elseif return_value >= _max then
-            return_value = _min
-        end
-
-        return return_value
-    end
-
-    local normalize = function(yaw)
-        while yaw < -180 do yaw = yaw + 360 end
-        while yaw > 180 do yaw = yaw - 360 end
-        return yaw
-    end
-
-    local ang_on_screen = function(x, y)
-        if x == 0 and y == 0 then return 0 end
-        return math_deg(math_atan2(y, x))
-    end
-
-    local fov = function(x, y, z, rng)
-        local lx, ly, lz = client_eye_position()
-        local view_x, view_y, roll = client_camera_angles()
-        local cur_fov = normalize(ang_on_screen(lx - x, ly - y) - view_y + rng)
-        return cur_fov
-    end
-
-    local get_e_height = function()
-        local result = math.huge
-        local lp = entity_get_local_player()
-        local entities = entity_get_players(true)
-
-        for i = 1, #entities do
-            local ent = entities[i]
-            local ex, ey, ez = entity_get_prop(ent, "m_vecOrigin")
-            local lx, ly, lz = entity_get_prop(entity_get_local_player(), "m_vecOrigin")
-            if ent ~= lp and entity_is_alive(ent) then
-                local distance = lz - ez
-                if distance < result then
-                result = distance
-                end
-            end
-        end
-        return math.floor(result)
-    end
-
-    local get_e_distance = function()
-     local result = math.huge
-     local lp = entity_get_local_player()
-     local entities = entity_get_players(true)
-
-        for i = 1, #entities do
-         local ent = entities[i]
-         local ex, ey, ez = entity_get_prop(ent, "m_vecOrigin")
-         local lx, ly, lz = entity_get_prop(entity_get_local_player(), "m_vecOrigin")
-            if ent ~= lp and entity_is_alive(ent) then
-                local distance = math.sqrt((lx - ex)^2 + (ly - ey)^2 + (lz - ez)^2)
-                if distance < result then
-                 result = distance
-                end
-            end
-        end
-        return math.floor(result/10)
-    end
-
-    local crosshair_target = function()
-        local enemies = entity_get_players(true)
-        local target, last_fov = nil, 180
-        for i = 1, #enemies do
-            local origin = { entity_get_prop(enemies[i], 'm_vecOrigin') }
-            local fov = math_abs(fov(origin[1], origin[2], origin[3], 180))
-            if fov < last_fov then
-                last_fov = fov
-                target = enemies[i]
-            end
-        end
-        return target
-    end
-
-    -- run all antiaim funcs
-    local g_antiaim = {}
-    g_antiaim = {
-        defensive = {
-            cmd_num = 0,
-            checker = 0,
-            tickbase = 0,
-            last_sim = 0,
-            def_iff = 0
-        },
-
-        ref_antiaim = {
-            pitch = "Off",
-            pitch_2 = 0,
-            yaw_base = "Local view",
-            yaw_1 = "Off",
-            yaw_2 = 0,
-            yaw_jitter_1 = "Off",
-            yaw_jitter_2 = 0,
-            body_yaw_1 = "Off",
-            body_yaw_2 = 0,
-            desync_1 = 0,
-            desync_2 = 0,
-            -- fake_yaw_limit = 0,
-            freestanding_body_yaw = false
-        },
-
-        condition = "Global",
-
-        update_direction = false,
-        manual_degree = 0,
-
-        cuz_jitter = false,
-
-        slow_jitter_counter = 0,
-
-        delay_jitter_curtick = 0,
-        delay_jitter = false,
-
-        by_step_min = 0,
-        by_step_max = 0,
-        by_step_tick = 0,
-        by_step_value = 0,
-        by_cache = 0,
-
-        defensive_pitch = 0,
-        defensive_pitch_spinback = false,
-        defensive_yaw = 0,
-        defensive_yaw_spinback = false,
-
-        should_legit_aa = function()
-            return UI.contains('antiaim_options', "Legit Anti-Aim rebind") and UI.get('legitaa_hotkey')
-        end,
-
-        on_use = function(e)
-            local v = {"CWorld","CCSPlayer","CFuncBrush"}
-            local get_distance = function(x1, y1, z1, x2, y2, z2)
-                return math_sqrt((x2 - x1) ^ 2 + (y2 - y1) ^ 2 + (z2 - z1) ^ 2)
-            end
-            local entity_has_c4 = function(ent)
-                local bomb = entity_get_all("CC4")[1]
-                return bomb ~= nil and entity_get_prop(bomb, "m_hOwnerEntity") == ent
-            end
-
-            if g_antiaim.should_legit_aa() then
-                local local_player = entity_get_local_player()
-                local distance = 67
-                local bomb = entity_get_all('CPlantedC4')[1]
-                local bomb_x, bomb_y, bomb_z = entity_get_prop(bomb, "m_vecOrigin")
-
-                if bomb_x ~= nil then
-                    local player_x, player_y, player_z = entity_get_prop(local_player, "m_vecOrigin")
-                    distance = get_distance(bomb_x, bomb_y, bomb_z, player_x, player_y, player_z)
-                end
-
-                local team_num = entity_get_prop(local_player, "m_iTeamNum")
-                local defusing = team_num == 3 and distance < 67
-
-                local on_bombsite = entity_get_prop(local_player, "m_bInBombZone")
-
-                local has_bomb = entity_has_c4(local_player)
-                local trynna_plant = on_bombsite ~= 0 and team_num == 2 and has_bomb and false
-
-                local px, py, pz = client_eye_position()
-                local pitch, yaw = client_camera_angles()
-
-                local sin_pitch = math_sin(math_rad(pitch))
-                local cos_pitch = math_cos(math_rad(pitch))
-                local sin_yaw = math_sin(math_rad(yaw))
-                local cos_yaw = math_cos(math_rad(yaw))
-
-                local dir_vec = { cos_pitch * cos_yaw, cos_pitch * sin_yaw, -sin_pitch }
-
-                local _, entindex = client_trace_line(local_player, px, py, pz, px + (dir_vec[1] * 8192), py + (dir_vec[2] * 8192), pz + (dir_vec[3] * 8192))
-
-                local using = true
-
-                if entindex ~= nil then
-                    for i=0, #v do
-                        if entity_get_classname(entindex) == v[i] then
-                            using = false
-                        end
-                    end
-                end
-
-                if not using and not trynna_plant and not defusing then
-                    e.in_use = 0
-                end
-
-                if e.in_use == 1 and trynna_plant then
-                    e.pitch = 90
-                    e.yaw = e.yaw + 180
-                end
-            end
-        end,
-
-        update_cmdnumber = function (e)
-            g_antiaim.defensive.cmd_num = e.command_number
-        end,
-
-        cmd_number_check = function (e)
-            if g_antiaim.defensive.cmd_num ~= e.command_number then
-                g_antiaim.defensive.cmd_num = 0
-            end
-
-            if g_antiaim.defensive.tickbase == 0 then
-                return g_antiaim.defensive.tickbase
-            end
-        end,
-
-        reset_defensive = function()
-            g_antiaim.defensive.tickbase = 0
-            g_antiaim.defensive.checker = 0
-        end,
-
-        update_tickbase = function (e)
-            if e.command_number >= g_antiaim.defensive.cmd_num then
-                local tickbase = entity_get_prop(entity_get_local_player(), "m_nTickBase")
-                local sim_time = entity_get_prop(entity_get_local_player(), "m_flSimulationTime")
-                g_antiaim.defensive.tickbase = math.abs(tickbase - g_antiaim.defensive.checker)
-                g_antiaim.defensive.checker = math.max(math.abs(toticks(sim_time) - math.floor(math.abs(client_latency()*1000)) - toticks(5)), tickbase, g_antiaim.defensive.checker)
-                g_antiaim.defensive.cmd_num = 0
-            end
-        end,
-
-        is_defensive_active = function()
-            local local_player = entity_get_local_player()
-
-            if local_player == nil then
-             return
-            end
-
-            local tickcount = globals.tickcount() - globals.tickinterval()
-            local sim_time = toticks(entity_get_prop(local_player, "m_flSimulationTime"))
-            local sim_diff = sim_time - g_antiaim.defensive.last_sim
-
-            if sim_diff < 0 then
-             g_antiaim.defensive.def_iff = tickcount + math.abs(sim_diff) - toticks(client_latency())
-            end
-
-            g_antiaim.defensive.last_sim = sim_time
-            g_antiaim.defensive.def_iff = 0
-
-            return g_antiaim.defensive.def_iff + 2 < g_antiaim.defensive.tickbase
-        end,
-
-        run_active_i = function()
-
-            if entity_get_local_player() == nil then
-                return
-            end
-
-            local in_air = bit.band(entity_get_prop(entity_get_local_player(),"m_fFlags"), 1) == 0 or ovo.is_holding_space
-            local duck = entity_get_prop(entity_get_local_player(),"m_flDuckAmount") > 0.55
-            local vx, vy, vz = entity_get_prop(entity_get_local_player(), "m_vecVelocity")
-            local velocity = math_sqrt(vx ^ 2 + vy ^ 2)
-            local isOs = ui_get(reference.hide_shots[1]) and ui_get(reference.hide_shots[2])
-            local isDt = ui_get(reference.doubletap[1]) and ui_get(reference.doubletap[2])
-            local isFd = ui_get(reference.fakeduck)
-            local da = entity.is_dormant()
-
-            if g_antiaim.should_legit_aa() and UI.get('preset_enable_Legit') then
-                ovo.active_i = 12
-            elseif g_antiaim.manual_degree ~= 0 and UI.get('preset_enable_Manual') then
-                ovo.active_i = 11
-            elseif UI.get('freestanding_hotkey') and UI.get('preset_enable_Freestanding') then
-                ovo.active_i = 10
-            elseif (not isOs and not isDt or isFd) and UI.get('preset_enable_Not-Exploit') then
-                ovo.active_i = 9
-            elseif in_air and duck and UI.get('preset_enable_Air-duck') then
-                ovo.active_i = 8
-            elseif in_air and UI.get('preset_enable_Air') then
-                ovo.active_i = 7
-            elseif duck and velocity > 2 and UI.get('preset_enable_Duck-Move') then
-                ovo.active_i = 5
-            elseif duck and UI.get('preset_enable_Duck') then
-                ovo.active_i = 4
-            elseif ui_get(reference.slow_motion[1]) and ui_get(reference.slow_motion[2]) and velocity > 10 and UI.get('preset_enable_Slowwalk') then
-                ovo.active_i = 6
-            elseif velocity > 2 and UI.get('preset_enable_Move') then
-                ovo.active_i = 3
-            elseif velocity < 2 and UI.get('preset_enable_Stand') then
-                ovo.active_i = 2
-            else
-                ovo.active_i = 1
-            end
-        end,
-
-        direction = function()
-            ui_set(reference.freestanding[2],"Always on")
-
-            local fs = (UI.contains('antiaim_options', "⬅️Freestanding on key➡️") and UI.get('freestanding_hotkey'))
-            local edge = (UI.contains('antiaim_options', "⬅️Edge yaw on key➡️") and UI.get('edgeyaw_hotkey'))
-
-            ui_set(reference.freestanding[1], fs)
-            ui_set(reference.freestanding[2], fs and 'Always on' or 'Off hotkey')
-            ui_set(reference.edge_yaw, edge)
-
-            if UI.contains('antiaim_options', "⬅️Manual AA on key➡️") then
-                if UI.get('manual_reset') == false and UI.get('manual_left') == false and UI.get('manual_right') == false and UI.get('manual_forward') == false then
-                    g_antiaim.update_direction = false
-                end
-
-                if UI.get('manual_reset') then
-                    g_antiaim.manual_degree = 0
-                end
-
-                if UI.get('manual_left') then
-                    if g_antiaim.update_direction == false then
-                        if g_antiaim.manual_degree ~= -90 then
-                            g_antiaim.manual_degree = -90
-                        else
-                            g_antiaim.manual_degree = 0
-                        end
-                    end
-                    g_antiaim.update_direction = true
-                end
-
-                if UI.get('manual_right') then
-                    if g_antiaim.update_direction == false then
-                        if g_antiaim.manual_degree ~= 90 then
-                            g_antiaim.manual_degree = 90
-                        else
-                            g_antiaim.manual_degree = 0
-                        end
-                    end
-                    g_antiaim.update_direction = true
-                end
-
-                if UI.get('manual_forward') then
-                    if g_antiaim.update_direction == false then
-                        if g_antiaim.manual_degree ~= 180 then
-                            g_antiaim.manual_degree = 180
-                        else
-                            g_antiaim.manual_degree = 0
-                        end
-                    end
-                    g_antiaim.update_direction = true
-                end
-            else
-                g_antiaim.manual_degree = 0
-            end
-
-            if g_antiaim.should_legit_aa() or g_antiaim.manual_degree ~= 0 then
-                ui_set(reference.freestanding[1], false)
-                ui_set(reference.edge_yaw, false)
-            end
-        end,
-
-        setup_antiaim = function(e)
-            local _state_ = ovo.p_states[ovo.active_i]
-
-            g_antiaim.ref_antiaim.pitch = "Custom"
-            g_antiaim.ref_antiaim.pitch = (g_antiaim.should_legit_aa()) and "Off" or "Custom"
-            g_antiaim.ref_antiaim.yaw_base = (g_antiaim.should_legit_aa() or g_antiaim.manual_degree ~= 0) and "Local view" or "At targets"
-            g_antiaim.ref_antiaim.yaw_1 = "180"
-
-            g_antiaim.ref_antiaim.desync_1 = -UI.get('desync1' .. _state_)
-            g_antiaim.ref_antiaim.desync_2 = -UI.get('desync2' .. _state_)
-
-            if true then
-                local condition = _state_
-                g_antiaim.condition = condition
-
-                local g_direction
-
-                if UI.get('body_yaw_mode_' .. condition) == "Delay" then
-                    g_direction = g_antiaim.delay_jitter and "right" or "left"
-                else
-                    g_direction = ovo.ez and "left" or "right"
-                end
-
-                if e.chokedcommands == 0 then
-                    g_antiaim.cuz_jitter = not g_antiaim.cuz_jitter
-                end
-
-                if UI.get('delay_tick_' .. condition) == 0 then
-                    if e.chokedcommands == 0 then
-                        g_antiaim.slow_jitter_counter = g_antiaim.slow_jitter_counter + 1
-                    end
-
-                    if g_antiaim.slow_jitter_counter >= 11 then
-                        g_antiaim.slow_jitter_counter = 0
-                    end
-
-                    if g_antiaim.slow_jitter_counter == 1 then
-                        g_antiaim.delay_jitter = true
-                    elseif g_antiaim.slow_jitter_counter == 1 then
-                        g_antiaim.delay_jitter = false
-                    elseif g_antiaim.slow_jitter_counter == 4 then
-                        g_antiaim.delay_jitter = false
-                    elseif g_antiaim.slow_jitter_counter == 1 then
-                        g_antiaim.delay_jitter = false
-                    elseif g_antiaim.slow_jitter_counter == 3 then
-                       g_antiaim.delay_jitter = true
-                    elseif g_antiaim.slow_jitter_counter == 1 then
-                        g_antiaim.delay_jitter = false
-                    elseif g_antiaim.slow_jitter_counter == 1 then
-                        g_antiaim.delay_jitter = true
-                    end
-                else
-                    if globals_tickcount() > g_antiaim.delay_jitter_curtick + UI.get('delay_tick_' .. condition) then
-                        if e.chokedcommands == 0 then
-                            g_antiaim.delay_jitter = not g_antiaim.delay_jitter
-                            g_antiaim.delay_jitter_curtick = globals_tickcount ()
-                        end
-                    elseif globals_tickcount() < g_antiaim.delay_jitter_curtick then
-                        g_antiaim.delay_jitter_curtick = globals_tickcount ()
-                    end
-                end
-
-                g_antiaim.ref_antiaim.pitch_2 = UI.get('pitch_' .. condition)
-
-                if UI.get('body_yaw_mode_' .. condition) == "Delay" and UI.get('yaw_logic_' .. condition) == "L/R" then
-                    g_antiaim.ref_antiaim.yaw_2 = g_antiaim.delay_jitter and UI.get('yaw_input_2_' .. condition) or UI.get('yaw_input_1_' .. condition)
-                elseif UI.get('yaw_logic_' .. condition) == "L/R" then
-                    g_antiaim.ref_antiaim.yaw_2 = ovo.ez and UI.get('yaw_input_1_' .. condition) or UI.get('yaw_input_2_' .. condition)
-                elseif UI.get('yaw_logic_' .. condition) == "Random" then
-                    g_antiaim.ref_antiaim.yaw_2 = client_random_int(UI.get('yaw_input_1_' .. condition), UI.get('yaw_input_2_' .. condition))
-                end
-
-                g_antiaim.ref_antiaim.yaw_jitter_1 = UI.get('yaw_jitter_mode_' .. condition)
-                if UI.get('body_yaw_mode_' .. condition) == "Delay" and UI.get('yaw_jitter_logic_' .. condition) == "L/R" then
-                    g_antiaim.ref_antiaim.yaw_jitter_2 = g_antiaim.delay_jitter and UI.get('jitter_input_2_' .. condition) or UI.get('jitter_input_1_' .. condition)
-                elseif UI.get('yaw_jitter_logic_' .. condition) == "L/R" then
-                    g_antiaim.ref_antiaim.yaw_jitter_2 = ovo.ez and UI.get('jitter_input_1_' .. condition) or UI.get('jitter_input_2_' .. condition)
-                elseif UI.get('yaw_jitter_logic_' .. condition) == "Random" then
-                    g_antiaim.ref_antiaim.yaw_jitter_2 = client_random_int(UI.get('jitter_input_1_' .. condition), UI.get('jitter_input_2_' .. condition))
-                elseif UI.get('yaw_jitter_logic_' .. condition) == "Better random" then
-                    g_antiaim.ref_antiaim.yaw_jitter_2 = client_random_int(UI.get('jitter_input_2_' .. condition), UI.get('jitter_input_1_' .. condition),UI.get('jitter_input_1_' .. condition),('jitter_input_2_' .. condition),UI.get('jitter_input_1_' .. condition),('jitter_input_2_' .. condition))
-                end
-
-                if UI.get('body_yaw_mode_' .. condition) == "Delay" then
-                    g_antiaim.ref_antiaim.body_yaw_1 = "Static"
-                else
-                    g_antiaim.ref_antiaim.body_yaw_1 = UI.get('body_yaw_mode_' .. condition)
-                end
-
-                if UI.get('body_yaw_mode_' .. condition) == "Delay" and g_antiaim.ref_antiaim.yaw_jitter_1 == "Center" then
-                    g_antiaim.ref_antiaim.yaw_2 = g_antiaim.ref_antiaim.yaw_2 + (g_antiaim.delay_jitter and g_antiaim.ref_antiaim.yaw_jitter_2 / 2 or -g_antiaim.ref_antiaim.yaw_jitter_2 / 2)
-                    g_antiaim.ref_antiaim.yaw_jitter_2 = 0
-                elseif UI.get('body_yaw_mode_' .. condition) == "Delay" and g_antiaim.ref_antiaim.yaw_jitter_1 == "Offset" then
-                    g_antiaim.ref_antiaim.yaw_2 = g_antiaim.ref_antiaim.yaw_2 + (g_antiaim.delay_jitter and g_antiaim.ref_antiaim.yaw_jitter_2 or 0)
-                    g_antiaim.ref_antiaim.yaw_jitter_2 = 0
-                end
-
-                if UI.get('body_yaw_mode_' .. condition) == "Delay" and UI.get('body_yaw_logic_' .. condition) == "L/R" then
-                    g_antiaim.ref_antiaim.body_yaw_2 = g_antiaim.delay_jitter and UI.get('body_yaw_input_2_' .. condition) or UI.get('body_yaw_input_1_' .. condition)
-                elseif UI.get('body_yaw_logic_' .. condition) == "L/R" then
-                    g_antiaim.ref_antiaim.body_yaw_2 = ovo.ez and UI.get('body_yaw_input_1_' .. condition) or UI.get('body_yaw_input_2_' .. condition)
-                elseif UI.get('body_yaw_logic_' .. condition) == "Random" then
-                    g_antiaim.ref_antiaim.body_yaw_2 = client_random_int(UI.get('body_yaw_input_1_' .. condition), UI.get('body_yaw_input_2_' .. condition))
-                elseif UI.get('body_yaw_logic_' .. condition) == "Better random" then
-                    g_antiaim.ref_antiaim.body_yaw_2 = client_random_int(UI.get('body_yaw_input_2_' .. condition), UI.get('body_yaw_input_1_' .. condition),UI.get('body_yaw_input_1_' .. condition), UI.get('body_yaw_input_2_' .. condition),UI.get('body_yaw_input_1_' .. condition), UI.get('body_yaw_input_2_' .. condition))
-                elseif UI.get('body_yaw_logic_' .. condition) == "Step" then
-                    g_antiaim.by_step_min = math_min(UI.get('body_yaw_'..g_direction..'_1_' .. condition), UI.get('body_yaw_'..g_direction..'_2_' .. condition))
-                    g_antiaim.by_step_max = math_max(UI.get('body_yaw_'..g_direction..'_1_' .. condition), UI.get('body_yaw_'..g_direction..'_2_' .. condition))
-                    g_antiaim.by_step_tick = globals_tickcount() % UI.get('body_yaw_tickbase_' .. condition)
-
-                    if g_antiaim.by_step_tick == UI.get('body_yaw_tickbase_' .. condition) - 1 then
-                        if g_antiaim.by_cache < g_antiaim.by_step_max then
-                            g_antiaim.by_cache = g_antiaim.by_cache + UI.get('body_yaw_amount_' .. condition)
-                        elseif g_antiaim.by_cache >= g_antiaim.by_step_max then
-                            g_antiaim.by_cache = g_antiaim.by_step_min
-                        end
-                    end
-
-                    g_antiaim.ref_antiaim.body_yaw_2 = clamp(g_antiaim.by_cache, g_antiaim.by_step_min, g_antiaim.by_step_max)
-                end
-
-                g_antiaim.ref_antiaim.freestanding_body_yaw = ovo.ez and UI.contains('freestanding_body_yaw_' .. condition, "Left") or UI.contains('freestanding_body_yaw_' .. condition, "Right")
-
-                if UI.get('force_defensive_' .. condition) then
-                    e.force_defensive = 1
-                end
-
-                local target, allow_defensive_aa = crosshair_target(), true
-
-                if target ~= nil then
-                    if UI.contains('avoidance_defensive_aa_' .. condition, "Enemy ping spike") and (entity_get_prop(entity_get_player_resource(target), "m_iPing") or 0) > 95 then
-                        allow_defensive_aa = false
-                    end
-                end
-
-                if UI.contains('avoidance_defensive_aa_' .. condition, "Local knife") and entity_get_player_weapon(entity_get_local_player()) ~= nil and csgo_weapons(entity_get_player_weapon(entity_get_local_player())).type == "knife" then
-                    allow_defensive_aa = false
-                end
-
-                if UI.contains('avoidance_defensive_aa_' .. condition, "Ignore Hide Shot") and ui_get(reference.hide_shots[1]) == true and ui_get(reference.hide_shots[2]) == true and (ui_get(reference.doubletap[1]) == true and ui_get(reference.doubletap[2]) == true) then
-                    allow_defensive_aa = true
-                elseif UI.contains('avoidance_defensive_aa_' .. condition, "Ignore Hide Shot") and ui_get(reference.hide_shots[1]) == true and ui_get(reference.hide_shots[2]) == true or (ui_get(reference.doubletap[1]) == false and ui_get(reference.doubletap[2]) == false) then
-                    allow_defensive_aa = false
-                end
-
-                if UI.contains('avoidance_defensive_aa_' .. condition, "Flick") and g_antiaim.defensive.tickbase > client_random_float(2.79,3.05) and g_antiaim.defensive.tickbase < client_random_float(11.98,12.13) then
-                    allow_defensive_aa = false
-                end
-
-                if UI.get('defensive_aa_' .. condition) and g_antiaim.is_defensive_active() and allow_defensive_aa then
-                    if UI.get('defensive_pitch_mode_' .. condition) == "Default" then
-                        g_antiaim.defensive_pitch = g_antiaim.ref_antiaim.pitch_2
-                    elseif UI.get('defensive_pitch_mode_' .. condition) == "Jitter" then
-                        g_antiaim.defensive_pitch = (g_antiaim.cuz_jitter and UI.get('defensive_pitch_min_' .. condition) or UI.get('defensive_pitch_max_' .. condition))
-                    elseif UI.get('defensive_pitch_mode_' .. condition) == "Spin" then
-                        g_antiaim.defensive_pitch = get_spin(g_antiaim.defensive_pitch, UI.get('defensive_pitch_min_' .. condition), UI.get('defensive_pitch_max_' .. condition), UI.get('defensive_pitch_spin_speed' .. condition))
-                    elseif UI.get('defensive_pitch_mode_' .. condition) == "Random" then
-                        g_antiaim.defensive_pitch = client_random_int(UI.get('defensive_pitch_min_' .. condition), UI.get('defensive_pitch_max_' .. condition))
-                    end
-
-                    if UI.get('defensive_yaw_mode_' .. condition) == "Default" then
-                        g_antiaim.defensive_yaw = 0
-                    elseif UI.get('defensive_yaw_mode_' .. condition) == "Jitter" then
-                        g_antiaim.defensive_yaw = (g_antiaim.cuz_jitter and UI.get('defensive_yaw_min_' .. condition) or UI.get('defensive_yaw_max_' .. condition))
-                    elseif UI.get('defensive_yaw_mode_' .. condition) == "Spin" then
-                        g_antiaim.defensive_yaw = get_spin(g_antiaim.defensive_yaw, UI.get('defensive_yaw_min_' .. condition), UI.get('defensive_yaw_max_' .. condition),UI.get('defensive_spin_speed' .. condition))
-                    elseif UI.get('defensive_yaw_mode_' .. condition) == "Random" then
-                        g_antiaim.defensive_yaw = client_random_int(UI.get('defensive_yaw_min_' .. condition), UI.get('defensive_yaw_max_' .. condition))
-                    end
-
-                    if UI.get('jitter_defensive_aa_' .. condition) then
-                        g_antiaim.ref_antiaim.pitch_2 = g_antiaim.defensive_pitch
-                        g_antiaim.ref_antiaim.yaw_2 =  g_antiaim.ref_antiaim.yaw_2 + g_antiaim.defensive_yaw
-                        g_antiaim.ref_antiaim.body_yaw_1 = g_antiaim.ref_antiaim.body_yaw_1
-                        g_antiaim.ref_antiaim.body_yaw_2 = g_antiaim.ref_antiaim.body_yaw_2
-                        g_antiaim.ref_antiaim.yaw_jitter_1 = g_antiaim.ref_antiaim.yaw_jitter_1
-                        g_antiaim.ref_antiaim.yaw_jitter_2 = g_antiaim.ref_antiaim.yaw_jitter_2
-                        g_antiaim.ref_antiaim.pitch = "Custom"
-                    elseif not UI.get('jitter_defensive_aa_' .. condition) and g_antiaim.defensive.tickbase > 1 then
-                        g_antiaim.ref_antiaim.pitch_2 = g_antiaim.defensive_pitch
-                        g_antiaim.ref_antiaim.yaw_2 =  g_antiaim.defensive_yaw
-                        g_antiaim.ref_antiaim.body_yaw_1 = "Static"
-                        g_antiaim.ref_antiaim.body_yaw_2 = -160
-                        g_antiaim.ref_antiaim.yaw_jitter_1 = "Off"
-                        g_antiaim.ref_antiaim.yaw_jitter_2 = g_antiaim.ref_antiaim.yaw_jitter_2
-                        g_antiaim.ref_antiaim.pitch = "Custom"
-                    end
-
-                    if UI.get('nochoke_defensive_mode' .. condition) == "Default" then
-                        if (g_antiaim.defensive.tickbase < g_antiaim.defensive.checker and g_antiaim.defensive.tickbase > (g_antiaim.defensive.checker/g_antiaim.defensive.checker)) then
-                            e.no_choke = false
-                            e.allow_send_packet = true
-                        end
-                    end
-
-                    if UI.get('nochoke_defensive_mode' .. condition) == "\aA9A95FFFFull" then
-                        if (g_antiaim.defensive.tickbase < g_antiaim.defensive.checker and g_antiaim.defensive.tickbase > (g_antiaim.defensive.checker/g_antiaim.defensive.checker)) then
-                          e.no_choke = true
-                          e.allow_send_packet = false
-                          g_antiaim.ref_antiaim.body_yaw_1 = "Off"
-                        else
-                            return
-                        end
-                    end
-
-                    if UI.get('nochoke_defensive_mode' .. condition) == "\aA9735FFFSemi" then
-                        if g_antiaim.defensive.tickbase > ((g_antiaim.defensive.checker / g_antiaim.defensive.checker) * 3) and g_antiaim.defensive.tickbase < 11 then
-                            e.no_choke = true
-                            e.allow_send_packet = false
-                            g_antiaim.ref_antiaim.body_yaw_1 = "Off"
-                        else
-                            return
-                        end
-                    end
-
-                    if UI.get('nochoke_defensive_mode' .. condition) == "\a389FFCC8Random" then
-                        if g_antiaim.defensive.tickbase > client_random_float(1,14) and g_antiaim.defensive.tickbase < client_random_float(1,14) then
-                            e.no_choke = true
-                            e.allow_send_packet = false
-                            g_antiaim.ref_antiaim.body_yaw_1 = "Off"
-                        else
-                            return
-                        end
-                    end
-
-                    if UI.get('nochoke_defensive_mode' .. condition) == "\aB2A15FFFFlick" then
-                        if g_antiaim.defensive.tickbase > 6.341 and g_antiaim.defensive.tickbase < 9.07 then
-                            e.no_choke = true
-                            e.allow_send_packet = false
-                            g_antiaim.ref_antiaim.body_yaw_1 = "Off"
-                        else
-                            return
-                        end
-                    end
-
-                end
-            end
-        end,
-
-        anti_knife = function ()
-
-            if UI.contains('antiaim_options', "✂️Avoid backstab") then
-                local players = entity_get_players(true)
-                local lx, ly, lz = entity_get_prop(entity_get_local_player(), "m_vecOrigin")
-
-                for i=1, #players do
-                    local local_player = entity_get_local_player()
-                    local eye_x, eye_y, eye_z = client_eye_position()
-                    local entindex = players[i]
-                    local head_x, head_y, head_z = entity_hitbox_position(entindex, 0)
-                    local fraction, entindex_hit = client_trace_line(local_player, eye_x, eye_y, eye_z, head_x, head_y, head_z)
-                    local distance = get_e_distance()
-                    local weapon = entity_get_player_weapon(players[i])
-
-                    if entity_get_classname(weapon) == "CKnife" and entindex_hit == entindex and distance <= 26 or entity_get_classname(weapon) == "CKnife" and fraction >= 0.85 and distance <= 26 then
-                        ui_set(reference.yaw[2], 179)
-                        ui_set(reference.yaw_base, "At targets")
-                    end
-                end
-            end
-        end,
-
-        safe_head = function ()
-            local distance = get_e_distance()
-            local height = get_e_height()
-
-            if UI.contains('antiaim_options', "Air Duck Knife Safe Head") or UI.contains('antiaim_options', "Air Duck Zeus Safe Head") or UI.contains('antiaim_options', "Height Safe Head") then
-
-                if UI.get('legitaa_hotkey') then
-                    return
-                end
-
-                if g_antiaim.manual_degree ~= 0 then
-                    return
-                end
-
-                local players = entity_get_players(true)
-
-                if UI.contains('antiaim_options', "Air Duck Zeus Safe Head") and entity_get_player_weapon(entity_get_local_player()) ~= nil and csgo_weapons(entity_get_player_weapon(entity_get_local_player())).type == "taser" and ovo.in_air and ovo.duck and height >= 0 then
-                    ui_set(reference.yaw_jitter[1],"Off")
-                    ui_set(reference.body_yaw[1], "Static")
-                    ui_set(reference.body_yaw[2], 129)
-                    ui_set(reference.yaw[2], 8)
-                    ui_set(reference.yaw_base, "At targets")
-
-                elseif UI.contains('antiaim_options', "Air Duck Knife Safe Head") and entity_get_player_weapon(entity_get_local_player()) ~= nil and csgo_weapons(entity_get_player_weapon(entity_get_local_player())).type == "knife" and ovo.in_air and ovo.duck and height >= 0 then
-                    ui_set(reference.yaw_jitter[1],"Off")
-                    ui_set(reference.body_yaw[1], "Static")
-                    ui_set(reference.body_yaw[2], -65)
-                    ui_set(reference.yaw[2], -20)
-                    ui_set(reference.yaw_base, "At targets")
-
-                elseif UI.contains('antiaim_options', "Height Safe Head") and entity_get_player_weapon(entity_get_local_player()) ~= nil and height >= 2 then
-                    ui_set(reference.yaw_jitter[1],"Off")
-                    ui_set(reference.body_yaw[1], "Static")
-                    ui_set(reference.body_yaw[2], 139)
-                    ui_set(reference.yaw[2], 7)
-                    ui_set(reference.yaw_base, "At targets")
-                end
-
-                for i=1, #players do
-                    local local_player = entity_get_local_player()
-                    local eye_x, eye_y, eye_z = client_eye_position()
-                    local entindex = players[i]
-                    local head_x, head_y, head_z = entity_hitbox_position(entindex, 0)
-                    local fraction, entindex_hit = client_trace_line(local_player, eye_x, eye_y, eye_z, head_x, head_y, head_z)
-                    local weapon = entity_get_player_weapon(players[i])
-
-                    if UI.contains('antiaim_options', "✂️Avoid backstab") and entity_get_classname(weapon) == "CKnife" and entindex_hit == entindex and distance <= 26 or UI.contains('antiaim_options', "✂️Avoid backstab") and entity_get_classname(weapon) == "CKnife" and fraction >= 0.85 and distance <= 26 then
-                        ui_set(reference.yaw[2], 179)
-                        ui_set(reference.yaw_base, "At targets")
-                    end
-                end
-            end
-        end,
-
-        setup_all_aa_funcs = function(cmd)
-            local local_player = entity.get_local_player()
-            local local_weapon = entity_get_prop(local_player, "m_hActiveWeapon")
-            local last_shot_time = entity_get_prop(local_weapon, "m_fLastShotTime")
-            ovo.in_air = bit.band(entity_get_prop(entity_get_local_player(),"m_fFlags"), 1) == 0 or ovo.is_holding_space
-            ovo.duck = entity_get_prop(entity_get_local_player(),"m_flDuckAmount") > 0.1
-            ovo.is_holding_space = bit.band(cmd.buttons, bit.lshift(1, 1)) ~= 0
-            ovo.lf_value = cmd.command_number % 3 == 0 and 0 or 1
-            ovo.ez = ovo.body_yaw > 0
-            if cmd.chokedcommands == 0 then
-                ovo.body_yaw = entity_get_prop(entity_get_local_player(), "m_flPoseParameter", 11) * 120 - 60
-            end
-
-            g_antiaim.on_use(cmd)
-            g_antiaim.run_active_i()
-            g_antiaim.direction()
-            g_antiaim.setup_antiaim(cmd)
-
-            if last_shot_time == nil then
-                return
-            end
-
-            local shot_time = globals.curtime() - last_shot_time
-
-            if shot_time == nil then
-                return
-            end
-
-            ui_set(reference.pitch[1], g_antiaim.ref_antiaim.pitch)
-            ui_set(reference.pitch[2], clamp(g_antiaim.ref_antiaim.pitch_2, -89, 89))
-            ui_set(reference.yaw_base, g_antiaim.ref_antiaim.yaw_base)
-            ui_set(reference.yaw[1], g_antiaim.ref_antiaim.yaw_1)
-            ui_set(reference.yaw_jitter[1], g_antiaim.ref_antiaim.yaw_jitter_1)
-            ui_set(reference.yaw_jitter[2], g_antiaim.ref_antiaim.yaw_jitter_2)
-            ui_set(reference.body_yaw[1], g_antiaim.ref_antiaim.body_yaw_1)
-            ui_set(reference.body_yaw[2], g_antiaim.ref_antiaim.body_yaw_2)
-
-            for i = 1, #ovo.p_states do
-                local condition = ovo.p_states[i]
-                local desync_amount = normalize(entity.get_prop(entity.get_local_player(), "m_flPoseParameter", 11) * 120 - 60)
-
-                if cmd.chokedcommands == 0 then
-                 ui_set(reference.yaw[2], normalize(desync_amount >= 0 and g_antiaim.ref_antiaim.desync_2*2 + (g_antiaim.should_legit_aa() and 0 or g_antiaim.manual_degree) or -g_antiaim.ref_antiaim.desync_1*2 + (g_antiaim.should_legit_aa() and 0 or g_antiaim.manual_degree)))
-                else
-                 ui_set(reference.yaw[2], normalize(g_antiaim.ref_antiaim.yaw_2 + (g_antiaim.should_legit_aa() and 0 or g_antiaim.manual_degree)))
-                end
-            end
-
-            ui_set(reference.freestanding_body_yaw, g_antiaim.ref_antiaim.freestanding_body_yaw)
-
-            g_antiaim.anti_knife()
-            g_antiaim.safe_head()
-        end,
-
-        register_antiaim = function(cmd)
-            -- set_og_menu(false)
-            if not UI.get('master_switch') then
-                return
-            end
-            g_antiaim.setup_all_aa_funcs(cmd)
-        end
-    }
-
-    local lerp = function(start, vend, time)
-        return start + (vend - start) * time
-    end
-
-    local scopedFraction = 0
-    local dtClr = {r = 0, g = 0, b = 0, a = 0}
-    local fsClr = {r = 0, g = 0, b = 0, a = 0}
-    local fs2Clr = {r = 0, g = 0, b = 0, a = 0}
-    local dt2Clr = {r = 0, g = 0, b = 0, a = 0}
-    local ManualClr = {r = 0, g = 0, b = 0, a = 0}
-    local dtInd = {w = 0, x = 0, y = 25}
-    local dt2Ind = {w = 0, x = 0, y = 25}
-    local fdInd = {w = 0, x = 0, y = 25, a = 0}
-    local spInd = {w = 0, x = 0, y = 25, a = 0}
-    local baInd = {w = 0, x = 0, y = 25, a = 0}
-    local fsInd = {w = 0, x = 0, y = 25, a = 0}
-    local osInd = {w = 0, x = 0, y = 25, a = 0}
-    local edgeInd = {w = 0, x = 0, y = 25, a = 0}
-    local fd2Ind = {w = 0, x = 0, y = 25, a = 0}
-    local sp2Ind = {w = 0, x = 0, y = 25, a = 0}
-    local ba2Ind = {w = 0, x = 0, y = 25, a = 0}
-    local fs2Ind = {w = 0, x = 0, y = 25, a = 0}
-    local os2Ind = {w = 0, x = 0, y = 25, a = 0}
-    local edge2Ind = {w = 0, x = 0, y = 25, a = 0}
-    local ManualInd = {w = 0, x = 0, y = 30, a = 0}
-
-    local function Indicator(initial)
-        return math.sin(math.abs(math.pi+(globals_realtime()*2)%(-math.pi*0.9)))*initial
-    end
-
-    client_set_event_callback("paint", function()
-
-        local local_player = entity_get_local_player()
-        if local_player == nil or entity_is_alive(local_player) == false then
-            return
-        end
-
-        local sizeX, sizeY = client_screen_size()
-        local weapon = entity_get_player_weapon(local_player)
-        local scopeLevel = entity_get_prop(weapon, 'm_zoomLevel')
-        local scoped = entity_get_prop(local_player, 'm_bIsScoped') == 1
-        local resumeZoom = entity_get_prop(local_player, 'm_bResumeZoom') == 1
-        local isValid = weapon ~= nil and scopeLevel ~= nil
-        local act = isValid and scopeLevel > 0 and scoped and not resumeZoom
-        local time = globals_frametime() * 9
-        local view_x, view_y, roll = client_camera_angles()
-
-        if act then
-            if scopedFraction < 1 then
-                scopedFraction = lerp(scopedFraction, 1 + 0.1, time)
-            else
-                scopedFraction = 1
-            end
-        else
-            scopedFraction = lerp(scopedFraction, 0, time)
-        end
-
-        local dpi = ui_get(ui_reference("MISC", "Settings", "DPI scale")):gsub('%%', '') - 100
-        local BFlag = "-db"
-        local globalMoveY = 9 + dpi/10
-        local globalMoveX = 9 + dpi/10
-        local indX, indY = renderer_measure_text("cd", "DT")
-        local yDefault = 9
-        local indCount = 0
-        indY = indY - 2
-
-        local isCharged = antiaim_funcs.get_double_tap()
-        local isFs = ui_get(reference.freestanding[1]) and ui_get(reference.freestanding[2])
-        local isBa = ui_get(ui_reference("RAGE", "Aimbot", "Force body aim"))
-        local isSp = ui_get(ui_reference("RAGE", "Aimbot", "Force safe point"))
-        local isOs = ui_get(reference.hide_shots[1]) and ui_get(reference.hide_shots[2])
-        local isFd = ui_get(reference.fakeduck)
-        local isDt = ui_get(reference.doubletap[1]) and ui_get(reference.doubletap[2])
-        local isedge = ui_get(reference.edge_yaw)
-        local isPeek = ui_get(reference.quick_peek_assist[2])
-        local isManual = g_antiaim.manual_degree ~= 0
-
-        if UI.get('manual_arrows') and g_antiaim.manual_degree ~= 0 then
-            local w, h = client_screen_size()
-            local distance = (w/2) / 198 * 15
-            local distance2 = (w/1) / 198 * 0
-
-            local left = (g_antiaim.manual_degree == -90)
-            local right = (g_antiaim.manual_degree == 90)
-            local forward = (g_antiaim.manual_degree == 180)
-
-            if left then
-             renderer_text(w/2 - distance, h / 2 - 1,  255, 255, 255, 255, "+c", 0, "<")
-            else
-             renderer_text(w/2 - distance , h / 2 - 1, 180, 180, 180, 150, "+c", 0, "<")
-            end
-
-            if right then
-             renderer_text(w/2 + distance, h / 2 - 1, 255, 255, 255, 255, "+c", 0, ">")
-            else
-             renderer_text(w/2 + distance, h / 2 - 1, 180, 180, 180, 150 , "+c", 0, ">")
-            end
-
-            if forward then
-             renderer_text(w/2 + distance2, h / 2.24 - 1, 255, 255, 255, 255, "+c", 0, "^")
-            else
-             renderer_text(w/2 + distance2, h / 2.24 - 1, 180, 180, 180, 72 , "+c", 0, "^")
-            end
-        end
-
-        if not UI.get('master_switch') then
-            return
-        end
-
-        local local_player = entity_get_local_player()
-        if local_player == nil or entity_is_alive(local_player) == false then
-            return
-        end
-
-        if UI.get('indicator') == "Off" then
-            return
-        end
-
-        if UI.get('indicator') == "Default" then
-            -- ind
-            local namex, namey = renderer_measure_text("db", "ο(=•ω＜=)ο ✨" )
-            renderer_text(sizeX/2 + ((namex + 11.894)/11.893), sizeY/2.01 + 20, 171, 199, 255,Indicator(255), "db" , nil ,"ο(=•ω＜=)ο ✨")
-
-               --test
-            if isFs then
-                fsClr.r = lerp(fsClr.r, 203, time)
-                fsClr.g = lerp(fsClr.g, 255, time)
-                fsClr.b = lerp(fsClr.b, 210, time)
-                fsClr.a = lerp(fsClr.a, 255, time)
-                renderer_text(sizeX / 2 + ((renderer_measure_text(BFlag, "fs") + 1.5)/1.5) , sizeY / 2 + fsInd.y + 11.98 + globalMoveY, fsClr.r, fsClr.g, fsClr.b, fsClr.a, BFlag, fsInd.w, "fs")
-            if fsInd.y < yDefault + indY * indCount then
-                fsInd.y = lerp(fsInd.y, yDefault + indY * indCount + 1, time)
-            else
-                fsInd.y = yDefault + indY * indCount
-                indCount = indCount + 1.2
-            end
-            elseif not isFs then
-                fsClr.r = lerp(fsClr.r, 219, time)
-                fsClr.g = lerp(fsClr.g, 159, time)
-                fsClr.b = lerp(fsClr.b, 230, time)
-                fsClr.a = lerp(fsClr.a, 255, time)
-                renderer_text(sizeX / 2 + ((renderer_measure_text(BFlag, "aa") + 2.01)/2.01), sizeY / 2 + fsInd.y + 14 + globalMoveY, fsClr.r, fsClr.g, fsClr.b, fsClr.a, BFlag, fsInd.w, "aa")
-
-                indCount = indCount + 1
-
-                fsClr.a = lerp(fsClr.a, 0, time)
-                fsInd.y = lerp(fsInd.y, yDefault - 5, time)
-            end
-                -- duck
-                if isFd then
-                 fdInd.a = lerp(fdInd.a, 255, time)
-                 renderer_text(sizeX / 2 + ((renderer_measure_text(BFlag, "fd") + 1.496)/1.496), sizeY / 2 + fdInd.y + 10.6 + globalMoveY, 255, 255, 4, fdInd.a, BFlag, 0, "fd")
-                if fdInd.y < yDefault + indY * indCount then
-                    fdInd.y = lerp(fdInd.y, yDefault + indY * indCount + 1, time)
-                else
-                    fdInd.y = yDefault + indY * indCount
-                end
-                indCount = indCount + 1
-                elseif not isFd then
-                 fdInd.a = lerp(fdInd.a, 0, time)
-                 fdInd.y = lerp(fdInd.y, yDefault - 5, time)
-                end
-              -- EDGE
-              if isedge then
-                edgeInd.a = lerp(edgeInd.a, 255, time)
-                renderer_text(sizeX / 2 + ((renderer_measure_text(BFlag, "ed") + 2.13)/2.13), sizeY / 2 + edgeInd.y + 10.9 + globalMoveY, 10, 228, 252, edgeInd.a, BFlag, edgeInd.w, "ed")
-
-                if edgeInd.y < yDefault + indY * indCount then
-                    edgeInd.y = lerp(edgeInd.y, yDefault + indY * indCount + 1, time)
-                else
-                    edgeInd.y = yDefault + indY * indCount
-                end
-                indCount = indCount + 1
-              elseif not isedge then
-                edgeInd.a = lerp(edgeInd.a, 0, time)
-                edgeInd.y = lerp(edgeInd.y, yDefault - 5, time)
-              end
-            -- DT
-            if isDt then
-                dtClr.a = lerp(dtClr.a, 255, time)
-                if dtInd.y < yDefault + indY * indCount then
-                    dtInd.y = lerp(dtInd.y, yDefault + indY * indCount + 1, time)
-                else
-                    dtInd.y = yDefault + indY * indCount
-                end
-
-                if isCharged then
-                    dtClr.r = lerp(dtClr.r, 25, time)
-                    dtClr.g = lerp(dtClr.g, 255, time)
-                    dtClr.b = lerp(dtClr.b, 25, time)
-                else
-                    dtClr.r = lerp(dtClr.r, 231, time)
-                    dtClr.g = lerp(dtClr.g, 53, time)
-                    dtClr.b = lerp(dtClr.b, 53, time)
-                end
-                indCount = indCount + 1
-            elseif not isDt then
-                dtClr.a = lerp(dtClr.a, 0, time)
-                dtInd.y = lerp(dtInd.y, yDefault - 5, time)
-            end
-            renderer_text(sizeX / 2 + ((renderer_measure_text(BFlag, "dt") + 1.595)/1.595), sizeY / 2 + dtInd.y + 9.6 + globalMoveY, dtClr.r, dtClr.g, dtClr.b, dtClr.a, BFlag, dtInd.w, "dt")
-
-            -- HS
-            if isOs then
-                osInd.a = lerp(osInd.a, 255, time)
-                renderer_text(sizeX / 2 + ((renderer_measure_text(BFlag, "os") + 1.593)/1.593), sizeY / 2 + osInd.y + 7.7 + globalMoveY, 80, 235, 80, osInd.a, BFlag, osInd.w, "os")
-                if osInd.y < yDefault + indY * indCount then
-                    osInd.y = lerp(osInd.y, yDefault + indY * indCount + 1, time)
-                else
-                    osInd.y = yDefault + indY * indCount
-                end
-
-                indCount = indCount + 1
-            elseif not isOs then
-                osInd.a = lerp(osInd.a, 0, time)
-                osInd.y = lerp(osInd.y, yDefault - 5, time)
-            end
-
-            -- baim
-            if isBa then
-                baInd.a = lerp(baInd.a, 255, time)
-                if baInd.y < yDefault + indY * indCount then
-                    baInd.y = lerp(baInd.y, yDefault + indY * indCount + 1, time)
-                else
-                    baInd.y = yDefault + indY * indCount
-                end
-                indCount = indCount + 1
-            elseif not isBa then
-                baInd.a = lerp(baInd.a, 0, time)
-                baInd.y = lerp(baInd.y, yDefault - 5, time)
-            end
-            renderer_text(sizeX / 2 + ((renderer_measure_text(BFlag, "ba") + 1.7)/1.7), sizeY / 2 + baInd.y + 9 + globalMoveY, 145, 255, 0, baInd.a, BFlag, 0, "ba")
-
-            -- sp
-            if isSp then
-                spInd.a = lerp(spInd.a, 255, time)
-                renderer_text(sizeX / 2 + ((renderer_measure_text(BFlag, "sp") + 1.7)/1.7), sizeY / 2 + spInd.y + 7 + globalMoveY, 145, 255, 0, spInd.a, BFlag, 0, "sp")
-                if spInd.y < yDefault + indY * indCount then
-                    spInd.y = lerp(spInd.y, yDefault + indY * indCount + 1, time)
-                else
-                    spInd.y = yDefault + indY * indCount
-                end
-                indCount = indCount + 1
-            elseif not isSp then
-                spInd.a = lerp(spInd.a, 0, time)
-                spInd.y = lerp(spInd.y, yDefault - 5, time)
-            end
-        end
-
-       -- Small pixel
-
-        if UI.get('indicator') == "Small Pixel[WIP]" then
-            local namex, namey2 = renderer_measure_text("-cd", "ELYZO")
-            renderer_text(sizeX/2 + ((namex + 2)/2) * scopedFraction, sizeY/2 + globalMoveY + 4, 255, 255, 255, 255, "-cd" , nil ,"ELYZO")
-            renderer_circle_outline(sizeX/2 + ((namex + 2.2)/2.2) * scopedFraction + 18, sizeY/2 + globalMoveY + 4, 255, 255, 255, 255, 2.8, 270, math.floor(math.abs(normalize(antiaim_funcs.get_desync(1))))/60, 0.4)
-
-            renderer_text(sizeX/2 + ((namex + 1.101)/1.101) * scopedFraction + 2, sizeY/2 + globalMoveY + 12, 255, 255, 255, 255, "-cd" , nil , "DESYNC : \aB6FF34EE" .. math.floor(math.abs(normalize(antiaim_funcs.get_desync(1)))) .. "\aFFFFFFFF°")
-
-            if isDt then
-                indCount = indCount + 1.2
-                dt2Clr.a = lerp(dt2Clr.a, 255, time)
-                if isCharged then
-                 dt2Clr.r = lerp(dt2Clr.r, 25, time)
-                 dt2Clr.g = lerp(dt2Clr.g, 255, time)
-                 dt2Clr.b = lerp(dt2Clr.b, 25, time)
-                else
-                 dt2Clr.r = lerp(dt2Clr.r, 231, time)
-                 dt2Clr.g = lerp(dt2Clr.g, 53, time)
-                 dt2Clr.b = lerp(dt2Clr.b, 53, time)
-                end
-
-                if dt2Ind.y < yDefault + indY * indCount then
-                 dt2Ind.y = lerp(dt2Ind.y, yDefault + indY * indCount + 1, time)
-                else
-                 dt2Ind.y = yDefault + indY * indCount
-                end
-
-            elseif not isDt then
-                dt2Clr.a = lerp(dt2Clr.a, 0, time)
-                dt2Ind.y = lerp(dt2Ind.y, yDefault - 5, time)
-            end
-
-            if not isPeek then
-             renderer_text(sizeX / 2 + ((renderer_measure_text("-cd", "DT") + 2)/2) * scopedFraction, sizeY / 2 + dt2Ind.y + globalMoveY, dt2Clr.r, dt2Clr.g, dt2Clr.b, dt2Clr.a, "-cd", dt2Ind.w, "DT")
-             renderer_circle_outline(sizeX / 2 + 6 * scopedFraction + globalMoveX + 1, sizeY / 2 + dt2Ind.y + globalMoveY +0.4, dt2Clr.r, dt2Clr.g, dt2Clr.b, dt2Clr.a, globalMoveX/3, 270, antiaim_funcs.get_tickbase_shifting(1)/10, 0.8)
-            elseif isPeek then
-             indCount = indCount + 1 - 1
-             renderer_text(sizeX / 2 + ((renderer_measure_text("-cd", "IDEAL TICK") + 1.9)/1.9) * scopedFraction, sizeY / 2 + dt2Ind.y + globalMoveY +0.2, dt2Clr.r, dt2Clr.g, dt2Clr.b, dt2Clr.a, "-cd", dt2Ind.w, "IDEAL TICK")
-             renderer_circle_outline(sizeX / 2 + 20 * scopedFraction + 25, sizeY / 2 + dt2Ind.y + globalMoveY +0.4, dt2Clr.r, dt2Clr.g, dt2Clr.b, dt2Clr.a,  globalMoveX/3, 270, antiaim_funcs.get_tickbase_shifting(1)/10, 0.8)
-            end
-
-            if isOs then
-                indCount = indCount + 1
-                renderer_text(sizeX / 2 + ((renderer_measure_text("-cd", "HS") + 2.2)/2.2) * scopedFraction + 1, sizeY / 2 + os2Ind.y + globalMoveY , 80, 235, 80, os2Ind.a, "-cd", os2Ind.w, "HS")
-                if os2Ind.y < yDefault + indY * indCount then
-                    os2Ind.y = lerp(os2Ind.y, yDefault + indY * indCount + 1, time)
-                    os2Ind.a = lerp(os2Ind.a, 255, time)
-                else
-                    os2Ind.a = lerp(os2Ind.a, 0, time)
-                    os2Ind.y = lerp(os2Ind.y, yDefault - 5, time)
-                end
-            end
-
-            if isManual then
-                indCount = indCount + 1
-                ManualClr.r = lerp(ManualClr.r, 219, time)
-                ManualClr.g = lerp(ManualClr.g, 159, time)
-                ManualClr.b = lerp(ManualClr.b, 230, time)
-                ManualClr.a = lerp(ManualClr.a, 255, time)
-                renderer_text(sizeX / 2 + ((renderer_measure_text("-cd", "MANUAL") + 2.3)/2.3) * scopedFraction + 2, sizeY / 2 + ManualInd.y + globalMoveY, ManualClr.r, ManualClr.g, ManualClr.b, ManualClr.a, "-cd", ManualInd.w, "MANUAL")
-
-                if ManualInd.y < yDefault + indY * indCount then
-                 ManualInd.y = lerp(ManualInd.y, yDefault + indY * indCount, time)
-                else
-                 ManualInd.y = yDefault + indY * indCount
-                end
-            end
-
-            if isFs then
-                indCount = indCount + 1
-                fs2Clr.r = lerp(fs2Clr.r, 203, time)
-                fs2Clr.g = lerp(fs2Clr.g, 255, time)
-                fs2Clr.b = lerp(fs2Clr.b, 210, time)
-                fs2Clr.a = lerp(fs2Clr.a, 255, time)
-                renderer_text(sizeX / 2 + ((renderer_measure_text("-cd", "FS") + 2)/2) * scopedFraction, sizeY / 2 + fs2Ind.y + globalMoveY, fs2Clr.r, fs2Clr.g, fs2Clr.b, fs2Clr.a, "-cd", fs2Ind.w, "FS")
-
-                if fs2Ind.y < yDefault + indY * indCount then
-                  fs2Ind.y = lerp(fs2Ind.y, yDefault + indY * indCount + 1, time)
-                else
-                 fs2Ind.y = yDefault + indY * indCount
-                end
-            end
-
-            if isedge then
-                indCount = indCount + 1
-                edge2Ind.a = lerp(edge2Ind.a, 255, time)
-                if edge2Ind.y < yDefault + indY * indCount then
-                    edge2Ind.y = lerp(edge2Ind.y, yDefault + indY * indCount + 1, time)
-                else
-                    edge2Ind.y = yDefault + indY * indCount
-                end
-                renderer_text(sizeX / 2 + ((renderer_measure_text("-cd", "ED") + 2)/2) * scopedFraction, sizeY / 2 + edge2Ind.y + globalMoveY, 10, 228, 252, edge2Ind.a, "-cd", edge2Ind.w, "ED")
-
-            elseif not isedge then
-             edge2Ind.a = lerp(edge2Ind.a, 0, time)
-             edge2Ind.y = lerp(edge2Ind.y, yDefault - 5, time)
-            end
-
-            if isBa then
-                indCount = indCount + 1
-                ba2Ind.a = lerp(ba2Ind.a, 255, time)
-                renderer_text(sizeX / 2 + ((renderer_measure_text("-cd", "BA") + 2)/2) * scopedFraction + 0.6, sizeY / 2 + ba2Ind.y + globalMoveY, 145, 255, 0, ba2Ind.a, "-cd", 0, "BA")
-
-                if ba2Ind.y < yDefault + indY * indCount then
-                    ba2Ind.y = lerp(ba2Ind.y, yDefault + indY * indCount + 1, time)
-                else
-                    ba2Ind.y = yDefault + indY * indCount
-                end
-            elseif not isBa then
-                ba2Ind.a = lerp(ba2Ind.a, 0, time)
-                ba2Ind.y = lerp(ba2Ind.y, yDefault - 5, time)
-            end
-            if isSp then
-                indCount = indCount + 1
-                sp2Ind.a = lerp(sp2Ind.a, 255, time)
-                renderer_text(sizeX / 2 + ((renderer_measure_text("-cd", "SP") + 2)/2) * scopedFraction + 0.6, sizeY / 2 + sp2Ind.y + globalMoveY, 145, 255, 0, sp2Ind.a, "-cd", 0, "SP")
-                if sp2Ind.y < yDefault + indY * indCount then
-                    sp2Ind.y = lerp(sp2Ind.y, yDefault + indY * indCount + 1, time)
-                else
-                    sp2Ind.y = yDefault + indY * indCount
-                end
-            elseif not isSp then
-                sp2Ind.a = lerp(sp2Ind.a, 0, time)
-                sp2Ind.y = lerp(sp2Ind.y, yDefault - 5, time)
-            end
-        end
-    end)
-
-    local hsv_to_rgb = function(b,c,d,e)
-        local f,g,h;local i=math_floor(b*6)
-        local j=b*6-i;local k=d*(1-c)
-        local l=d*(1-j*c)
-        local m=d*(1-(1-j)*c)i=i%6;
-        if i==0 then f,g,h=d,m,k
-         elseif i==1 then f,g,h=l,d,k
-         elseif i==2 then f,g,h=k,d,m
-         elseif i==3 then f,g,h=k,l,d
-         elseif i==4 then f,g,h=m,k,d
-         elseif i==5 then f,g,h=d,k,l end;
-        return f*255,g*255,h*255,e*255
-    end
-
-    client_set_event_callback("paint_ui", function()
-
-        if ui_is_menu_open() then
-            ui_set(UI.get_element('fucking_shit_string'), "\affffffff✨ \a99ADFFFFElyzo\aFFFFFFFF.\a7878FFFFCode\affffffff ✨")
-
-            set_og_menu(false)
-
-            ui_set(UI.get_element('manual_left'), "On hotkey")
-            ui_set(UI.get_element('manual_reset'), "On hotkey")
-            ui_set(UI.get_element('manual_right'), "On hotkey")
-            ui_set(UI.get_element('manual_forward'), "On hotkey")
-        end
-    end)
-
-    client_set_event_callback("run_command", g_antiaim.update_cmdnumber)
-    client_set_event_callback("run_command", g_antiaim.cmd_number_check)
-    client_set_event_callback("predict_command", g_antiaim.update_tickbase)
-    client_set_event_callback("level_init", g_antiaim.reset_defensive)
-    client_set_event_callback("player_death", g_antiaim.reset_defensive)
-    client_set_event_callback("round_start", g_antiaim.reset_defensive)
-    client_set_event_callback("setup_command", g_antiaim.register_antiaim)
-    client_set_event_callback("shutdown", function()
-        set_og_menu(true)
-    end)
-
-    local ground_ticks = 0
-    client_set_event_callback("pre_render", function()
-        if not UI.get('master_switch') then
-            return
-        end
-
-        local lp = entity_get_local_player()
-
-        if not lp then
-            return
-        end
-
-        local me = ent.get_local_player()
-
-        if not me then
-            return
-        end
-
-        local desync_amount = normalize(entity.get_prop(lp, "m_flPoseParameter", 11) * 120 - 60)
-
-        local leg_movement = ui_reference("AA", "other", "leg movement")
-
-        local flags = entity_get_prop(lp, "m_fFlags")
-        ground_ticks = bit.band(flags, 1) == 0 and 0 or (ground_ticks < 5 and ground_ticks + 1 or ground_ticks)
-
-
-        if UI.contains('animations', "Air Fallen legs") then
-            entity_set_prop(lp, "m_flPoseParameter", 1, 6)
-        end
-
-        if UI.contains('animations', "Backward Slide") then
-            entity_set_prop(lp, "m_flPoseParameter", 0.96, 0)
-            ui_set(leg_movement, globals_tickcount() % 8 <= 1 and "Off" or "Always slide")
-        end
-
-        if UI.contains('animations', "Jitter leg") then
-            entity_set_prop(lp, 'm_flPoseParameter', client_random_float(-0.295,0.56) ,0.55 / 70 or 4, 6)
-            ui_set(leg_movement, globals_tickcount() % 8 <= 1 and "Off" or "Always slide")
-        end
-
-        if UI.contains('animations', "Pitch on land") then
-            ground_ticks = bit.band(flags, 1) == 1 and ground_ticks + 1 or 0
-
-            if ground_ticks > 30 and ground_ticks < 500 then
-                entity_set_prop(lp, "m_flPoseParameter", 0.5, 12)
-            end
-        end
-
-        if UI.contains('animations', "Goofy Ahh Anim") then
-            --local my_animlayer = me:get_anim_overlay(11)
-            entity_set_prop(lp, "m_flPoseParameter", desync_amount >= 0 and 7 or -9, 11)
-        end
-
-        if UI.contains('animations', "Earthquake") then
-            local my_animlayer = me:get_anim_overlay(12)
-            my_animlayer.weight = client_random_float(-0.57,0.492)
-        end
-
-        if UI.contains('animations', "Air jitter leg") then
-            entity_set_prop(lp, "m_flPoseParameter", globals_tickcount() % 5.89 > 1 and client_random_float(3,24) / 60 or 1, 6)
-        end
-
-        if UI.contains('animations', "Air walk") then
-            local onground = bit.band(flags, 1) ~= 0
-            if not onground then
-                local my_animlayer = me:get_anim_overlay(6)
-                my_animlayer.weight = 1
-            end
-        end
-
-        if UI.contains('animations', "Blind") then
-            local my_animlayer = me:get_anim_overlay(9)
-            my_animlayer.weight = 1
-            my_animlayer.sequence = 224
-        end
-
-        if UI.contains('animations', "Fake duck") then
-            if ui_get(reference.fakeduck) then
-                entity_set_prop(lp, "m_flPoseParameter", 1, globals_tickcount() % 5.3 > 1 and 0.335 or 1.03)
-            end
-        end
-
-        if UI.contains('animations', "Moonwalk on Ground") then
-            entity_set_prop(lp, "m_flPoseParameter", 0, 7)
-        end
-
-        if UI.contains('animations', "Always Moonwalk") then
-            local my_animlayer = me:get_anim_overlay(6)
-            my_animlayer.weight = 1
-        end
-
-        if UI.contains('animations', "in Duck Moonwalk") and ovo.duck and not ovo.in_air then
-            local my_animlayer = me:get_anim_overlay(6)
-            my_animlayer.weight = 1
-        end
-
-        if UI.contains('animations', "Body lean") then
-            local my_animlayer = me:get_anim_overlay(12)
-            my_animlayer.weight = 1
-        end
-    end)
-
-
-    client_set_event_callback("setup_command", function (e)
-        local local_player = entity_get_local_player()
-        local pitch, yaw = client_camera_angles()
-        local players = entity_get_players(true)
-        local ref = {
-        fakeduck = ui_reference("Rage", "Other", "Duck peek assist"),
-        doubletap = ui_reference("Rage", "Aimbot", "Double tap"),
-        hide_shots = ui_reference("AA", "Other", "On shot anti-aim"),
-        fl_limit = ui_reference("AA", "Fake lag", "Limit"),
-        fl_mode = ui_reference("AA", "Fake lag", "Amount"),
-        fl_var = ui_reference("AA", "Fake lag", "Variance"),
-        quick_peek_assist = ui_reference("RAGE", "Other", "Quick peek assist"),
-        holdaim = ui.reference("Misc", "Settings", "sv_maxusrcmdprocessticks_holdaim"),
-        }
-
-        local _state_ = ovo.p_states[ovo.active_i]
-        local local_weapon = entity_get_prop(local_player, "m_hActiveWeapon")
-        local last_shot_time = entity_get_prop(local_weapon, "m_fLastShotTime") or nil
-        local vx, vy, vz = entity_get_prop(entity_get_local_player(), "m_vecVelocity")
-        local velocity = math_sqrt(vx ^ 2 + vy ^ 2)
-
-        if local_player == nil then
-            return
-        end
-
-        if UI.get('Fast_Ladder') then
-            if entity_get_prop(local_player, "m_MoveType") == 9 then
-                e.yaw = math.floor(e.yaw+0.5)
-                e.roll = 0
-
-                if e.forwardmove > 0 then
-                    if pitch < 45 then
-                        e.pitch = 90
-                        e.in_moveright = 1
-                        e.in_moveleft = 0
-                        e.in_forward = 0
-                        e.in_back = 1
-                        if e.sidemove == 0 then
-                            e.yaw = e.yaw + 91
-                        end
-                        if e.sidemove < 0 then
-                            e.yaw = e.yaw + 149.86
-                        end
-                        if e.sidemove > 0 then
-                            e.yaw = e.yaw + 31.4
-                        end
-                    end
-                end
-
-                if e.forwardmove < 0 then
-                    e.pitch = 90
-                    e.in_moveleft = 1
-                    e.in_moveright = 0
-                    e.in_forward = 1
-                    e.in_back = 0
-                    if e.sidemove == 0 then
-                        e.yaw = e.yaw + 91
-                    end
-                    if e.sidemove > 0 then
-                        e.yaw = e.yaw + 149.86
-                    end
-                    if e.sidemove < 0 then
-                        e.yaw = e.yaw + 31.4
-                    end
-                end
-            end
-        end
-
-        if ui_get(ref.fakeduck) then
-         ui_set(ref.fl_limit, 14)
-         ui_set(ref.fl_mode, "Maximum")
-         ui_set(ref.fl_var, 0)
-        else
-            if UI.get('fake_lag_mode') == "Dynamic" then
-              ui_set(ref.fl_mode, "Dynamic")
-            end
-
-            if UI.get('fake_lag_mode') == "Maximum" then
-              ui_set(ref.fl_mode, "Maximum")
-            end
-
-            if UI.get('fake_lag_mode') == "Fluctuate" then
-             ui_set(ref.fl_mode, "Fluctuate")
-            end
-
-            if UI.get('fake_lag_mode') == "Adaptive" then
-             ui_set(ref.fl_mode, globals_tickcount() % 11 > 1 and "Maximum" or "Fluctuate")
-             ui_set(ref.fl_limit, globals_tickcount() % 29 > 1 and 15 or 3 )
-             ui_set(ref.fl_var, 5)
-             e.allow_send_packet = globals_tickcount() % 12 > 1 == true
-
-                local distance = get_e_distance()
-
-                if ovo.in_air then
-                 ui_set(ref.fl_mode, "Maximum")
-                 ui_set(ref.fl_limit, globals_tickcount() % 17 > 1 and 15 or 1)
-                 ui_set(ref.fl_var, globals_tickcount() % 2 > 1 and 0 or 2)
-                end
-
-                if velocity <= 8 then
-                 ui_set(ref.fl_mode, globals_tickcount() % 9 > 1 and "Maximum" or "Fluctuate")
-                 ui_set(ref.fl_limit, client_random_int(14,15))
-                 ui_set(ref.fl_var, client_random_int(0,5))
-                 e.no_choke = e.command_number % 11 == 0
-                end
-
-                if last_shot_time == nil then
-                 return
-                end
-
-                local shot_time = globals_curtime() - last_shot_time
-
-                if shot_time == nil then
-                 return
-                end
-
-                if csgo_weapons(entity_get_player_weapon(entity_get_local_player())).type == "knife" or csgo_weapons(entity_get_player_weapon(entity_get_local_player())).type == "grenade" then
-                 ui_set(ref.fl_limit, client_random_int(14,15))
-                 ui_set(ref.fl_mode, globals_tickcount() % 7 > 1 and "Fluctuate" or "Maximum")
-                 ui_set(ref.fl_var, 12)
-                end
-
-                if math.abs(toticks(shot_time)) <= 4 and not csgo_weapons(entity_get_player_weapon(entity_get_local_player())).type == "grenade" and e.chokedcommands >= 1 then
-                 ui_set(ref.fl_mode, "Maximum")
-                 ui_set(ref.fl_limit, 1)
-                 ui_set(ref.fl_var, 0)
-                 e.no_choke = true
-                 e.allow_send_packet = false
-                 e.force_defensive = true
-                 g_antiaim.ref_antiaim.body_yaw_1 = "Off"
-                 ui_set(ref.holdaim, false)
-                end
-
-                if ovo.in_air and csgo_weapons(entity_get_player_weapon(entity_get_local_player())).type == "knife" and distance < 32 then
-                 ui_set(ref.fl_limit, 15)
-                 ui_set(ref.fl_mode, globals_tickcount() % 2 > 1 and "Fluctuate" or "Maximum")
-                 ui_set(ref.fl_var, 2)
-                end
-            else
-                ui_set(ref.fl_limit, UI.get('fake_lag_limit'))
-                ui_set(ref.fl_var, UI.get('fake_lag_var'))
-            end
-
-        end
-
-        if UI.get('FL_Shot') then
-            if local_player == nil then
-             return
-            end
-
-            if last_shot_time == nil then
-             return
-            end
-
-            if csgo_weapons(entity_get_player_weapon(entity_get_local_player())).type == "knife" or csgo_weapons(entity_get_player_weapon(entity_get_local_player())).type == "grenade" or csgo_weapons(entity_get_player_weapon(entity_get_local_player())).type == "taser" then
-             return
-            end
-
-            local shot_time = globals_curtime() - last_shot_time
-
-            if shot_time == nil then
-             return
-            end
-
-            if math_abs(toticks(shot_time)) < 2 and ui_get(reference.doubletap[2]) == true then
-             ui_set(reference.doubletap[1], false)
-             e.force_defensive = true
-
-                client_delay_call(0.23, function ()
-                 ui_set(reference.doubletap[1], true)
-                end)
-            end
-
-            if math_abs(toticks(shot_time)) < 2 and ui_get(reference.hide_shots[2]) == true and ui_get(reference.quick_peek_assist[2]) == true then
-              ui_set(reference.hide_shots[1], false)
-              e.force_defensive = true
-
-                client_delay_call(0.23, function ()
-                 ui_set(reference.hide_shots[1], true)
-                end)
-            end
-        end
-    end)
-end
-
-initialize_script()
+[SRvq[[[[[	[[vqvq[[$	$
+	SRvq[[[[[$< Y74:?>)$>5-Y&[F[	[	[$< Y74:?>)$2?Y&[F[Y
+$	$	$JHHLY[vq[[[[[[[[	SY	[YRvq[[[[[[[[		[vq[[[[vq[[[[		[	vqvq[[$	$
+	SR[[vq[[[[SRvqvq[$W[$$$W[$W[$W[$	$$W[$	$W[$$
+$W[$	$W[$	$W[$	$W[$$W[$$W[$
+W[$W[$$W[$$
+	W[$$W[$	$W[$$
+	W[$	$W[$	$$W[$	$W[$	$[F[UW[U$$W[UW[UW[U	$$W[U	$W[U$
+$W[U	$W[U	$W[U	$W[U$W[U$W[U
+W[UW[U$W[U$
+	W[U$W[U	$W[U$
+	W[U	$W[U	$$W[U	$W[U	$vq[$$	$		W[$$$	W[$$W[$$$W[$$	W[$$MOW[$$	$W[$$W[$$$	W[$$W[$$	W[$$
+W[$$	$W[$$	W[$$	W[$$[F[U$	$		W[U$$	W[U$W[U$$W[U$	W[U$MOW[U$	$W[U$W[U$$	W[U$W[U$	W[U$
+W[U$	$W[U$	W[U$	W[U$vq[$	W[$	W[$W[$W[$	W[$W[$	
+W[$	W[$	W[$	[F[U	W[U	W[UW[UW[U	W[UW[U	
+W[U	W[U	W[U	vq[$$	W[$$W[$		W[$$$W[$$
+W[$$W[$$	$	W[$$W[$W[$$W[$$W[$$W[$$W[$[F[U$	W[U$W[U		W[U$$W[U$
+W[U$W[U$	$	W[U$W[UW[U$W[U$W[U$W[U$W[Uvq[			$	$W[			$	W[			$	W[			$	W[			$W[			$W[			$	$W[			$	W[			$	$$	[F[			U	$W[			U	W[			U	W[			U	W[			UW[			UW[			U	$W[			U	W[			U	$$	vq[$W[$W[$W[$W[$W[$W[$IW[$	W[$
+	W[$W[$W[$W[$W[$W[$W[$W[$W[$W[$W[$W[$W[$	[F[UW[UW[UW[UW[UW[UW[UIW[U	W[U
+	W[UW[UW[UW[UW[UW[UW[UW[UW[UW[UW[UW[UW[U	vq[$	W[$	
+W[$W[$	[F[U	W[U	
+W[UW[U	vq[	$W[	$	W[	$W[	$W[	$W[	$W[	$	
+	W[	$	W[	$	W[	$[F[	UW[	U	W[	UW[	UW[	UW[	UW[	U	
+	W[	U	W[	U	W[	Uvqvq$	$SJMMWJMMWIHHWY,YRvqvq[	$$		[F[SRvq[[[[[[F[
