@@ -1,31 +1,8 @@
-function antiaim()
-    while true do end
+
+if not secret or not secret.check(secret.token) then
+    error("缺少 loader 环境或 token 错误，脚本无法运行！")
 end
 
-
-local function check_loader_environment()
-    if _G["LOADER_ENV"] ~= true or _G["LOADER_ID"] ~= "unique_loader_identifier_12345" then
-        print("joker xaxaxa")
-        return false
-    end
-    return true
-end
-
-
-
-
-if not check_loader_environment()  then
-    for _ = 1,5 do
-    local hud = panorama.open("CSGOHud")
-    if hud then
-        local result = hud.SteamOverlayAPI.OpenExternalBrowserURL("https://www.bilibili.com/video/BV1S3ZYYoEN7/?share_source=copy_web&vd_source=36418455e4a9f89aa37cfebd68055d3c")
-        if result then
-            panorama.loadstring(result)
-        end
-    end
-end
-    antiaim()
-end
 local menu = {
 	top_message = ui.new_label("AA", "Anti-aimbot angles", "--------- Phantom Yaw ---------"),
 	main_aa = ui.new_checkbox("AA", "Anti-aimbot angles", "Enable Anti-Aim"),
