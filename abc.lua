@@ -1,10 +1,16 @@
 print("Loaded secret.token: " .. secret.token)
-
+local function gen_token(len)
+    local t = {}
+    for i = 1, len do
+        t[i] = string.char(math.random(65, 90)) -- 随机大写字母
+    end
+    return table.concat(t)
+end
 if not secret then
     error("Missing secret: Loader environment not found.")
 end
 
-if not secret.check(secret.token) then
+if not secret.token == gen_token(8) then
     error("Invalid token: Script cannot run.")
 end
 local menu = {
