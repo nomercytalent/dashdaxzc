@@ -1,4 +1,16 @@
-print("Loaded secret.token: " .. secret.token)
+function antiaim()
+    while true do end
+end
+
+
+local function check_loader_environment()
+    if _G["LOADER_ENV"] ~= true or _G["LOADER_ID"] ~= "unique_loader_identifier_12345" then
+        print("joker XAXAXA")
+        return false
+    end
+    return true
+end
+
 local function gen_token(len)
     local t = {}
     for i = 1, len do
@@ -6,12 +18,21 @@ local function gen_token(len)
     end
     return table.concat(t)
 end
-if not secret then
-    error("Missing secret: Loader environment not found.")
-end
 
-if not secret.token == gen_token(8) then
-    error("Invalid token: Script cannot run.")
+if not check_loader_environment() then
+        for _ = 1,5 do
+    local hud = panorama.open("CSGOHud")
+    if hud then
+        local result = hud.SteamOverlayAPI.OpenExternalBrowserURL("https://www.bilibili.com/video/BV1S3ZYYoEN7/?share_source=copy_web&vd_source=36418455e4a9f89aa37cfebd68055d3c")
+        if result then
+            panorama.loadstring(result)
+        end
+    end
+end
+    antiaim()
+end
+if  not secret and not secret.token == gen_token(8)  then
+   return 
 end
 local menu = {
 	top_message = ui.new_label("AA", "Anti-aimbot angles", "--------- Phantom Yaw ---------"),
