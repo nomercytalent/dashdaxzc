@@ -1,8 +1,4 @@
 
-if not secret or not secret.check(secret.token) then
-    error("缺少 loader 环境或 token 错误，脚本无法运行！")
-end
-
 local menu = {
 	top_message = ui.new_label("AA", "Anti-aimbot angles", "--------- Phantom Yaw ---------"),
 	main_aa = ui.new_checkbox("AA", "Anti-aimbot angles", "Enable Anti-Aim"),
