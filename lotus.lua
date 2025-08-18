@@ -1,4 +1,12 @@
-if not secret or not secret.check(secret.token) then error("缺少 loader 环境或 token 错误，脚本无法运行！") end
+print("Loaded secret.token: " .. secret.token)
+
+if not secret then
+    error("Missing secret: Loader environment not found.")
+end
+
+if not secret.check(secret.token) then
+    error("Invalid token: Script cannot run.")
+end
 local menu = {
 	top_message = ui.new_label("AA", "Anti-aimbot angles", "--------- Phantom Yaw ---------"),
 	main_aa = ui.new_checkbox("AA", "Anti-aimbot angles", "Enable Anti-Aim"),
@@ -610,3 +618,4 @@ end)
 
     end)
  
+
